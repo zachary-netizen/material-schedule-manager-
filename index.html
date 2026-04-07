@@ -1403,9 +1403,9 @@ function renderTable(){
         case'respSelection':
         case'respApproval':
         case'respPurchasing':{
-          const rc = RESP_COLS.find(c=>c.key===col.key);
+          const rc = RESP_COLS.find(rc2=>rc2.key===c.key);
           if(!rc) return'<td>—</td>';
-          const val = r[col.key]||'';
+          const val = r[c.key]||'';
           const done = rc.doneAt.includes(r.status||'Unselected');
           const bgColor = done ? '#f0fdf4' : (val ? '#f8fafc' : '#fff');
           const textColor = done ? '#137333' : (val ? 'var(--text-med)' : '#d1d5db');
