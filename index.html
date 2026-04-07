@@ -181,6 +181,12 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
 .var-pos{color:#0b8043;font-weight:500}
 .var-neg{color:#b3261e;font-weight:500}
 
+/* BULK EDIT */
+.bulk-bar{display:none;position:sticky;top:0;z-index:100;background:#1e3a5f;color:#fff;padding:10px 16px;align-items:center;gap:12px;font-size:12px;border-bottom:2px solid #2563eb}
+.bulk-bar.active{display:flex}
+.bulk-count{font-weight:600}
+.row-checkbox{accent-color:var(--slate);width:14px;height:14px;cursor:pointer;flex-shrink:0}
+
 /* RESPONSIBILITY COLUMNS */
 .resp-cell{text-align:center;font-size:10.5px;padding:4px 6px}
 .resp-cell.done{background:#f0fdf4;color:#137333;font-weight:500}
@@ -405,7 +411,6 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
       <button class="btn btn-ghost btn-sm" onclick="showModal('invoice-modal')" title="T4: Invoice upload">&#128190; Invoice</button>
       <button class="btn btn-ghost btn-sm" onclick="showModal('spec-modal')" title="Spec sheet upload">&#128209; Spec</button>
       <button class="btn btn-ghost btn-sm" onclick="showExportModal()" title="T3: Export PDFs">&#8659; Export</button>
-      <button class="btn btn-ghost btn-sm" onclick="enterTradeView()" title="T12: Trade-safe link">&#128279; Trade view</button>
       <button class="btn btn-admin btn-sm" id="admin-btn" onclick="toggleAdmin()" title="T9/T11: Admin tools">&#9733; Admin</button>
       <button class="btn btn-ghost btn-sm" id="prefill-editor-btn" onclick="openPrefillEditor()" title="Edit prefill options" style="display:none;font-size:11px">&#9998; Prefills</button>
       <button class="btn btn-ghost btn-sm" onclick="showModal('share-modal')" title="Share project links">&#128279; Share links</button>
@@ -432,6 +437,32 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
 
   <!-- STATS ROW -->
   <div class="stats" id="stats-row"></div>
+
+  <!-- BULK EDIT BAR -->
+  <div class="bulk-bar" id="bulk-bar">
+    <span class="bulk-count" id="bulk-count">0 selected</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="bulk-status-sel" style="font-size:12px;padding:4px 8px;border-radius:5px;border:none;background:#2d5282;color:#fff">
+        <option value="">Change status…</option>
+        <option>Unselected</option><option>Approved</option><option>Ordered</option><option>Installed</option>
+      </select>
+      <button onclick="bulkApplyStatus()" style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:500">Apply</button>
+      <select id="bulk-resp-field" style="font-size:12px;padding:4px 8px;border-radius:5px;border:none;background:#2d5282;color:#fff">
+        <option value="">Set responsibility…</option>
+        <option value="respSelection">Selection</option>
+        <option value="respApproval">Approval</option>
+        <option value="respPurchasing">Purchasing</option>
+      </select>
+      <select id="bulk-resp-val" style="font-size:12px;padding:4px 8px;border-radius:5px;border:none;background:#2d5282;color:#fff">
+        <option value="">— person —</option>
+        <option>Designer</option><option>Client</option><option>Contractor</option>
+        <option>Trade</option><option>Admin</option><option>Supervisor</option>
+      </select>
+      <button onclick="bulkApplyResp()" style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:500">Apply</button>
+    </div>
+    <div style="flex:1"></div>
+    <button onclick="bulkClear()" style="background:none;color:rgba(255,255,255,0.7);border:0.5px solid rgba(255,255,255,0.3);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">✕ Clear</button>
+  </div>
 
   <!-- RESPONSIBILITY HEADER -->
   <div id="resp-header" style="background:#f8fafc;border-bottom:1px solid var(--border);padding:10px 16px;display:none">
@@ -680,6 +711,9 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
 </div>
 
 <script>
+/* ============================================================
+   DATA & STATE
+   =============================================
 /* ============================================================
    DATA & STATE
    ============================================================ */
@@ -1017,7 +1051,7 @@ const _urlToken  = _urlParams.get('token');
 const _urlProj   = _urlParams.get('project'); // human-readable hint (optional)
 
 // Column visibility — all on by default, user can toggle
-const ALL_COLS = ['itemId','location','item','description','qty','price','total','invoiceNum','specDoc','supplier','status'];
+const ALL_COLS = ['itemId','location','item','description','qty','price','total','invoiceNum','specDoc','supplier','status','respSelection','respApproval','respPurchasing'];
 let hiddenCols = new Set(); // columns the user has hidden
 
 // Load API key — try localStorage first, then sessionStorage, then URL param (for local file use)
@@ -1057,8 +1091,21 @@ function canEdit(){ return ['admin','supervisor'].includes(ACCESS_MODE); }
 function isReadOnly(){ return ['trade','client'].includes(ACCESS_MODE); }
 
 
-let projects={};
-Object.keys(SEED).forEach(p=>{projects[p]=SEED[p].map(r=>({...r}));});
+// Load projects from localStorage (persists across sessions)
+// Falls back to SEED data on first load
+let projects=(function(){
+  try{
+    const saved=localStorage.getItem('msm_projects');
+    if(saved){
+      const parsed=JSON.parse(saved);
+      if(parsed && Object.keys(parsed).length) return parsed;
+    }
+  }catch(e){}
+  // First load — use SEED data
+  const p={};
+  Object.keys(SEED).forEach(k=>{p[k]=SEED[k].map(r=>({...r}));});
+  return p;
+})();
 
 /* ============================================================
    UTILITIES
@@ -1233,12 +1280,17 @@ function renderTable(){
   const grandTotal=rows.filter(r=>r.status!=='Unselected').reduce((s,r)=>s+(r.qty||0)*(r.price||0),0);
 
   // Build columns dynamically
-  const cols=[
+  const cols=[];
+  // Checkbox col for admin/supervisor bulk select
+  if(['admin','supervisor'].includes(ACCESS_MODE)){
+    cols.push({key:'_chk',label:'<input type="checkbox" id="chk-all" style="accent-color:#fff;cursor:pointer" onchange="toggleAllRows(this.checked)">',w:'32px',align:'center'});
+  }
+  cols.push(...[
     {key:'itemId',label:'Item ID',w:'80px'},
     {key:'location',label:'Location',w:'110px'},
     {key:'item',label:'Item',w:'110px'},
     {key:'description',label:'Description',w:'200px'},
-  ];
+  ]);
   if(!hidePricing){
     cols.push({key:'qty',label:'Qty',w:'42px',align:'center'});
     cols.push({key:'price',label:'Price',w:'72px',align:'right'});
@@ -1418,7 +1470,8 @@ function renderTable(){
             </span>
           </td>`;
         }
-        case'_edit':return`<td style="text-align:center"><button class="mob-edit-btn" onclick="openEditEntry(${idx})" style="background:none;border:0.5px solid var(--border-med);color:var(--text-muted);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer">Edit</button></td>`;
+        case'_chk':return`<td style="text-align:center;padding:4px"><input type="checkbox" class="row-checkbox" data-id="${r.id}" onchange="toggleRowSelect(${r.id},this.checked)"></td>`;
+        case'_edit':return`<td style="text-align:center"><button class="mob-edit-btn" onclick="openEditEntry(${idx})"" style="background:none;border:0.5px solid var(--border-med);color:var(--text-muted);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer">Edit</button></td>`;
         default:return`<td></td>`;
       }
     });
@@ -1753,7 +1806,7 @@ function saveEntry(){
 function deleteEntry(){
   if(!confirm('Delete this entry?'))return;
   projects[currentProject]=projects[currentProject].filter(r=>r.id!==editingId);
-  hideModal('entry-modal');buildNav();renderTable();
+  saveProjects();hideModal('entry-modal');buildNav();renderTable();
 }
 
 /* ============================================================
@@ -2284,6 +2337,23 @@ function applyInvoiceMatches(){
     }
   });
 
+  // Save invoice line items to memory for future prefill
+  invMatchContext.forEach((item,i)=>{
+    const chk = document.getElementById('chk-'+i);
+    if(!chk||!chk.checked) return;
+    if(item.invoiceDesc && invSupplier){
+      const key = 'inv_items';
+      try{
+        const existing = JSON.parse(localStorage.getItem(key)||'{}');
+        if(!existing[invSupplier]) existing[invSupplier]=[];
+        if(!existing[invSupplier].includes(item.invoiceDesc)){
+          existing[invSupplier].push(item.invoiceDesc);
+          localStorage.setItem(key, JSON.stringify(existing));
+        }
+      }catch(e){}
+    }
+  });
+
   // Reset modal
   invMatchContext=[];
   _invFileData=null;
@@ -2296,7 +2366,7 @@ function applyInvoiceMatches(){
     const el=document.getElementById(id);if(el)el.value='';
   });
   hideModal('invoice-modal');
-  buildNav();renderTable();
+  saveProjects();buildNav();renderTable();
   if(applied||added)alert('Applied '+applied+' match(es), added '+added+' new entr'+(added===1?'y':'ies')+'.');
 }
 
@@ -2545,7 +2615,8 @@ function updateImportHint(sched){
 const COL_LABELS = {
   itemId:'Item ID', location:'Location', item:'Item', description:'Description',
   qty:'Qty', price:'Price', total:'Total', invoiceNum:'Invoice #',
-  specDoc:'Spec', supplier:'Supplier', status:'Status'
+  specDoc:'Spec', supplier:'Supplier', status:'Status',
+  respSelection:'Selection', respApproval:'Approval', respPurchasing:'Purchasing'
 };
 
 function buildColPicker(){
@@ -2810,7 +2881,7 @@ function applySpecMatches(){
   const urlEl=document.getElementById('spec-url');if(urlEl)urlEl.value='';
   try{switchSpecTab('url');}catch(e){}
   hideModal('spec-modal');
-  buildNav();renderTable();
+  saveProjects();buildNav();renderTable();
   if(applied)alert('Spec sheet attached to '+applied+' item(s).');
 }
 
@@ -3208,6 +3279,84 @@ function resetPrefillToDefaults(){
     buildPrefillEditor(parts[0], parts.slice(1).join('.'));
   }
   buildPrefillNav();
+}
+
+
+/* ============================================================
+   BULK EDIT
+   ============================================================ */
+let _selectedIds = new Set();
+
+function toggleRowSelect(id, checked){
+  if(checked) _selectedIds.add(id);
+  else _selectedIds.delete(id);
+  updateBulkBar();
+}
+
+function toggleAllRows(checked){
+  const checkboxes = document.querySelectorAll('.row-checkbox');
+  checkboxes.forEach(cb=>{
+    cb.checked = checked;
+    const id = parseInt(cb.dataset.id);
+    if(checked) _selectedIds.add(id);
+    else _selectedIds.delete(id);
+  });
+  updateBulkBar();
+}
+
+function updateBulkBar(){
+  const bar = document.getElementById('bulk-bar');
+  const count = document.getElementById('bulk-count');
+  if(!bar) return;
+  if(_selectedIds.size > 0){
+    bar.classList.add('active');
+    count.textContent = _selectedIds.size + ' selected';
+  } else {
+    bar.classList.remove('active');
+  }
+  // Sync chk-all state
+  const all = document.querySelectorAll('.row-checkbox');
+  const chkAll = document.getElementById('chk-all');
+  if(chkAll && all.length > 0){
+    chkAll.checked = _selectedIds.size === all.length;
+    chkAll.indeterminate = _selectedIds.size > 0 && _selectedIds.size < all.length;
+  }
+}
+
+function bulkApplyStatus(){
+  const val = document.getElementById('bulk-status-sel').value;
+  if(!val){ alert('Select a status first.'); return; }
+  (projects[currentProject]||[]).forEach(r=>{
+    if(_selectedIds.has(r.id)) r.status = val;
+  });
+  saveProjects();
+  bulkClear();
+  buildNav(); renderTable();
+}
+
+function bulkApplyResp(){
+  const field = document.getElementById('bulk-resp-field').value;
+  const val = document.getElementById('bulk-resp-val').value;
+  if(!field || !val){ alert('Select a field and person.'); return; }
+  (projects[currentProject]||[]).forEach(r=>{
+    if(_selectedIds.has(r.id)) r[field] = val;
+  });
+  saveProjects();
+  bulkClear();
+  buildNav(); renderTable();
+}
+
+function bulkClear(){
+  _selectedIds.clear();
+  document.querySelectorAll('.row-checkbox').forEach(cb=>cb.checked=false);
+  const chkAll = document.getElementById('chk-all');
+  if(chkAll){ chkAll.checked=false; chkAll.indeterminate=false; }
+  updateBulkBar();
+}
+
+
+function saveProjects(){
+  try{ localStorage.setItem('msm_projects', JSON.stringify(projects)); }catch(e){}
 }
 
 (function bootApp(){
