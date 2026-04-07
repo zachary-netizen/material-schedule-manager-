@@ -396,6 +396,7 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
       </select>
       <button class="btn btn-ghost btn-sm" onclick="showModal('import-modal')" title="T1: Initial project upload">&#8679; Import</button>
       <button class="btn btn-ghost btn-sm" onclick="showModal('invoice-modal')" title="T4: Invoice upload">&#128190; Invoice</button>
+      <button class="btn btn-ghost btn-sm" onclick="showModal('spec-modal')" title="Spec sheet upload">&#128209; Spec</button>
       <button class="btn btn-ghost btn-sm" onclick="showExportModal()" title="T3: Export PDFs">&#8659; Export</button>
       <button class="btn btn-ghost btn-sm" onclick="enterTradeView()" title="T12: Trade-safe link">&#128279; Trade view</button>
       <button class="btn btn-admin btn-sm" id="admin-btn" onclick="toggleAdmin()" title="T9/T11: Admin tools">&#9733; Admin</button>
@@ -603,7 +604,7 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
   </div>
   <div class="mftr">
     <button class="btn btn-white btn-sm" onclick="hideModal('invoice-modal')">Cancel</button>
-    <button class="btn btn-sm" style="background:var(--slate);color:#fff" onclick="applyInvoiceMatches()" id="inv-apply-btn" style="display:none">Apply selected</button>
+    <button class="btn btn-sm" id="inv-apply-btn" style="background:var(--slate);color:#fff;display:none" onclick="applyInvoiceMatches()">Apply selected</button>
   </div>
 </div>
 </div>
@@ -746,9 +747,21 @@ const PROJECT_TOKENS = {
   '627 Mcroberts Ave': 'mcr-8f4a2d9b',
   '42 Indian Trail':   'ind-3c7e1f5a',
 };
-// Reverse map: token -> project name
-const TOKEN_TO_PROJECT = {};
-Object.entries(PROJECT_TOKENS).forEach(([proj, tok]) => { TOKEN_TO_PROJECT[tok] = proj; });
+
+// Role tokens: token -> {project, role}
+// Roles: 'trade' | 'client' | 'supervisor' | 'admin'
+const ROLE_TOKENS = {
+  // 627 Mcroberts Ave
+  'mcr-8f4a2d9b':       {project:'627 Mcroberts Ave', role:'trade'},
+  'mcr-client-a3f9':    {project:'627 Mcroberts Ave', role:'client'},
+  'mcr-super-b7c2':     {project:'627 Mcroberts Ave', role:'supervisor'},
+  'mcr-admin-z9x1':     {project:'627 Mcroberts Ave', role:'admin'},
+  // 42 Indian Trail
+  'ind-3c7e1f5a':        {project:'42 Indian Trail',   role:'trade'},
+  'ind-client-d4e8':     {project:'42 Indian Trail',   role:'client'},
+  'ind-super-f2a1':      {project:'42 Indian Trail',   role:'supervisor'},
+  'ind-admin-q8w3':      {project:'42 Indian Trail',   role:'admin'},
+};
 
 // Detect access mode from URL
 const _urlParams = new URLSearchParams(window.location.search);
@@ -761,19 +774,25 @@ let hiddenCols = new Set(); // columns the user has hidden
 
 let _anthropicKey = localStorage.getItem('anthropic_key') || '';
 
-let ACCESS_MODE   = 'admin';   // 'admin' | 'trade'
-let ACCESS_PROJECT = null;     // project name if trade mode
+let ACCESS_MODE   = 'admin';   // 'admin' | 'client' | 'supervisor' | 'trade' | 'invalid'
+let ACCESS_PROJECT = null;
 
 if (_urlToken) {
-  const matched = TOKEN_TO_PROJECT[_urlToken];
-  if (matched) {
-    ACCESS_MODE    = 'trade';
-    ACCESS_PROJECT = matched;
-    isTradeView    = true;
+  const roleEntry = ROLE_TOKENS[_urlToken];
+  if (roleEntry) {
+    ACCESS_MODE    = roleEntry.role;
+    ACCESS_PROJECT = roleEntry.project;
+    if(roleEntry.role === 'trade') isTradeView = true;
   } else {
     ACCESS_MODE = 'invalid';
   }
 }
+
+// Role capability helpers
+function canSeeFinancials(){ return ['admin','supervisor','client'].includes(ACCESS_MODE); }
+function canSeeAdmin(){ return ACCESS_MODE === 'admin'; }
+function canEdit(){ return ['admin','supervisor'].includes(ACCESS_MODE); }
+function isReadOnly(){ return ['trade','client'].includes(ACCESS_MODE); }
 
 
 let projects={};
@@ -793,7 +812,10 @@ function getRows(){if(currentSchedule==='__all__')return projects[currentProject
 function allRows(){return projects[currentProject]||[];}
 function getConfig(){if(currentSchedule==='__all__')return{};return SCHEDULE_CONFIG[currentSchedule]||{};}
 function hasUnselected(s){return(projects[currentProject]||[]).some(r=>r.schedule===s&&r.status==='Unselected');}
-function showModal(id){document.getElementById(id).classList.add('open');}
+function showModal(id){
+  if(id==='share-modal') buildSharePanel();
+  document.getElementById(id).classList.add('open');
+}
 function hideModal(id){document.getElementById(id).classList.remove('open');}
 
 /* ============================================================
@@ -834,12 +856,41 @@ function calcStats(rows){
     const varClass=variance>0?'var-neg':'var-pos';
     budgetHtml=`<div class="stat"><div class="stat-label">Budget</div><div class="stat-val">${fmt(budget)}</div><div class="stat-sub ${varClass}">Variance: ${fmt(Math.abs(variance))} ${variance>0?'over':'under'}</div></div>`;
   }
-  document.getElementById('stats-row').innerHTML=`
-    <div class="stat"><div class="stat-label">Total value</div><div class="stat-val">${cfg.hidePricing?'N/A':fmt(total)}</div></div>
-    <div class="stat"><div class="stat-label">Line items</div><div class="stat-val">${rows.length}</div><div class="stat-sub">${unsel} unselected</div></div>
-    <div class="stat"><div class="stat-label">Outstanding</div><div class="stat-val">${cfg.hidePricing?'N/A':fmt(outstanding)}</div></div>
-    <div class="stat"><div class="stat-label">Ordered/delivered</div><div class="stat-val">${ordered}</div></div>
-    ${budgetHtml}`;
+  // Role-aware stats
+  const statusCounts = {
+    Unselected:rows.filter(r=>r.status==='Unselected').length,
+    Approved:rows.filter(r=>r.status==='Approved').length,
+    Ordered:rows.filter(r=>r.status==='Ordered').length,
+    Installed:rows.filter(r=>r.status==='Installed').length,
+  };
+  let statsHtml = '';
+  if(ACCESS_MODE==='trade'){
+    // Trade: status counts only, no financials
+    statsHtml = `
+      <div class="stat"><div class="stat-label">Unselected</div><div class="stat-val">${statusCounts.Unselected}</div></div>
+      <div class="stat"><div class="stat-label">Approved</div><div class="stat-val">${statusCounts.Approved}</div></div>
+      <div class="stat"><div class="stat-label">Ordered</div><div class="stat-val">${statusCounts.Ordered}</div></div>
+      <div class="stat"><div class="stat-label">Installed</div><div class="stat-val">${statusCounts.Installed}</div></div>
+      <div class="stat"><div class="stat-label">Total items</div><div class="stat-val">${rows.length}</div></div>`;
+  } else if(ACCESS_MODE==='client'){
+    // Client: financials + key statuses
+    statsHtml = `
+      <div class="stat"><div class="stat-label">Total value</div><div class="stat-val">${fmt(total)}</div></div>
+      <div class="stat"><div class="stat-label">Outstanding</div><div class="stat-val">${fmt(outstanding)}</div></div>
+      <div class="stat"><div class="stat-label">Items ordered</div><div class="stat-val">${statusCounts.Ordered}</div></div>
+      <div class="stat"><div class="stat-label">Installed</div><div class="stat-val">${statusCounts.Installed}</div></div>
+      <div class="stat"><div class="stat-label">Still unselected</div><div class="stat-val">${statusCounts.Unselected}</div></div>`;
+  } else {
+    // Supervisor / Admin: everything
+    statsHtml = `
+      <div class="stat"><div class="stat-label">Total value</div><div class="stat-val">${cfg.hidePricing?'N/A':fmt(total)}</div></div>
+      <div class="stat"><div class="stat-label">Line items</div><div class="stat-val">${rows.length}</div><div class="stat-sub">${unsel} unselected</div></div>
+      <div class="stat"><div class="stat-label">Outstanding</div><div class="stat-val">${cfg.hidePricing?'N/A':fmt(outstanding)}</div></div>
+      <div class="stat"><div class="stat-label">Ordered</div><div class="stat-val">${statusCounts.Ordered}</div></div>
+      <div class="stat"><div class="stat-label">Installed</div><div class="stat-val">${statusCounts.Installed}</div></div>
+      ${budgetHtml}`;
+  }
+  document.getElementById('stats-row').innerHTML = statsHtml;
   document.getElementById('stats-row').style.gridTemplateColumns=isAdmin&&!cfg.hidePricing?'repeat(5,minmax(0,1fr))':'repeat(4,minmax(0,1fr))';
 }
 
@@ -917,9 +968,10 @@ function renderTable(){
   const statusF=document.getElementById('filter-status').value;
   const searchF=(document.getElementById('filter-search').value||'').toLowerCase();
   const showUnsel=document.getElementById('show-unsel').checked;
+  const isAdmin = ACCESS_MODE==='admin';
   const showBudget=isAdmin&&document.getElementById('show-budget')&&document.getElementById('show-budget').checked;
   const cfg=getConfig();
-  const hidePricing=isTradeView||cfg.hidePricing;
+  const hidePricing = (ACCESS_MODE==='trade') || cfg.hidePricing;
 
   let rows=getRows().filter(r=>{
     if(!showUnsel&&r.status==='Unselected')return false;
@@ -1032,8 +1084,9 @@ function renderTable(){
             const chipClass=i>0?'inv-chip inv-chip-reorder':'inv-chip';
             const prefix=i>0?'<span style="font-size:9px;color:#92400e;font-weight:600">RE&#8209;ORDER&nbsp;</span>':'';
             const label=inv.num||(inv.url?'View':'—');
-            return inv.url
-              ?`<span class="${chipClass}">${prefix}<a href="${inv.url}" target="_blank">${label}</a></span>`
+            const href = inv.pdf||inv.url||'';
+            return href
+              ?`<span class="${chipClass}">${prefix}<a href="${href}" target="_blank" title="${inv.fileName||inv.url||'Invoice'}">${label}</a></span>`
               :`<span class="${chipClass}">${prefix}${label}</span>`;
           }).join('')}</div></td>`;
         }
@@ -1044,7 +1097,8 @@ function renderTable(){
           return`<td style="text-align:center"><div style="display:flex;flex-direction:column;gap:2px;align-items:center">${withUrl.map((inv,i)=>`<a class="doc-link" style="${i>0?'background:#fef3c7;border-color:#fcd34d;color:#92400e':''}" href="${inv.url}" target="_blank" title="${i>0?'Re-order: ':''}${inv.num||'Open invoice'}">&#128196;</a>`).join('')}</div></td>`;
         }
         case'specDoc':{
-          if(r.specUrl)return`<td style="text-align:center"><a class="doc-link" href="${r.specUrl}" target="_blank" title="Open spec sheet">&#128209;</a></td>`;
+          const specHref = r.specPdf||r.specUrl||'';
+          if(specHref)return`<td style="text-align:center"><a class="doc-link" href="${specHref}" target="_blank" title="Open spec sheet">&#128209;</a></td>`;
           return`<td style="text-align:center"><span class="doc-link empty" title="No spec sheet">—</span></td>`;
         }
         case'supplier':{
@@ -1193,6 +1247,13 @@ function doImport(){
     const name=document.getElementById('import-new-proj-name').value.trim();
     if(!name){alert('Enter a project name.');return;}
     projects[name]=[];targetProject=name;
+    // Generate role tokens for the new project
+    const _prefix=name.replace(/[^a-z0-9]/gi,'').substring(0,4).toLowerCase()||'proj';
+    const _rand=()=>Math.random().toString(36).substring(2,6);
+    ['trade','client','supervisor','admin'].forEach(role=>{
+      const tok=_prefix+'-'+role.substring(0,3)+'-'+_rand();
+      ROLE_TOKENS[tok]={project:name,role};
+    });
     const psel=document.getElementById('proj-select');
     const opt=document.createElement('option');opt.value=name;opt.text=name;
     psel.insertBefore(opt,psel.options[psel.options.length-1]);
@@ -1513,8 +1574,9 @@ function processInvFile(file){
   if(!allowed.includes(file.type)){alert('Please upload a PDF or image file.');return;}
   const reader = new FileReader();
   reader.onload = function(e){
-    const b64 = e.target.result.split(',')[1];
-    _invFileData = {base64: b64, mediaType: file.type, name: file.name};
+    const dataUri = e.target.result; // full data URI including prefix
+    const b64 = dataUri.split(',')[1];
+    _invFileData = {base64: b64, mediaType: file.type, name: file.name, dataUri: dataUri};
     const nameEl = document.getElementById('inv-file-name');
     if(nameEl) nameEl.textContent = '✓ ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)';
   };
@@ -1706,8 +1768,8 @@ function renderInvoiceMatches(items){
     const typeTag = isMatch
       ? `<span style="font-size:10px;color:#174ea6;font-weight:500">&#10003; Matches: ${item.matchLabel||''}</span>`
       : `<span style="font-size:10px;color:#92400e;font-weight:500">&#43; New entry &rarr; ${item.suggestedSchedule||'Other'} / ${item.suggestedItem||item.invoiceDesc}</span>`;
-    return `<div class="match-item" id="match-${i}" onclick="toggleMatch(${i},${i})" style="border-color:${borderCol};background:${bgCol}">
-      <input type="checkbox" id="chk-${i}" checked style="accent-color:var(--slate);flex-shrink:0">
+    return `<div class="match-item" id="match-${i}" style="border-color:${borderCol};background:${bgCol};cursor:default">
+      <input type="checkbox" id="chk-${i}" checked style="accent-color:var(--slate);flex-shrink:0" onchange="toggleMatch(${i},${i})">
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px">
           <span style="font-size:12px;font-weight:500;color:var(--text)">${item.invoiceDesc}</span>${badge}
@@ -1720,7 +1782,7 @@ function renderInvoiceMatches(items){
         ${!isMatch?`<div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <label style="font-size:10.5px;color:var(--text-muted)">Schedule:</label>
           <select id="new-sched-${i}" style="font-size:11px;padding:2px 6px;border:0.5px solid var(--border-med);border-radius:4px" onclick="event.stopPropagation()">
-            ${SCHEDULES.map(s=>`<option${s===(item.suggestedSchedule||'')?'selected':''}>${s}</option>`).join('')}
+            ${SCHEDULES.map(s=>'<option value="'+s+'"'+(s===(item.suggestedSchedule||'')?' selected':'')+'>'+s+'</option>').join('')}
           </select>
           <label style="font-size:10.5px;color:var(--text-muted)">Item name:</label>
           <input id="new-item-${i}" type="text" value="${item.suggestedItem||item.invoiceDesc}" style="font-size:11px;padding:2px 7px;border:0.5px solid var(--border-med);border-radius:4px;flex:1;min-width:100px" onclick="event.stopPropagation()">
@@ -1734,8 +1796,86 @@ function toggleMatch(mi, ci){
   const chk  = document.getElementById('chk-'+ci);
   const card = document.getElementById('match-'+mi);
   if(!chk||!card) return;
-  chk.checked = !chk.checked;
   card.classList.toggle('selected', chk.checked);
+}
+
+/* ============================================================
+   APPLY INVOICE MATCHES
+   ============================================================ */
+function applyInvoiceMatches(){
+  if(!invMatchContext||!invMatchContext.length){hideModal('invoice-modal');return;}
+  const invNum     = (document.getElementById('inv-number')||{}).value||'';
+  const invUrl     = (document.getElementById('inv-url-ref')||document.getElementById('inv-url')||{}).value||'';
+  const invSupplier= (document.getElementById('inv-supplier')||{}).value||'';
+  const invDate    = (document.getElementById('inv-date')||{}).value||'';
+  const invPdf     = (!_invFileIsUrl&&_invFileData&&_invFileData.dataUri)?_invFileData.dataUri:null;
+  const invFileName= (_invFileData&&_invFileData.name)||null;
+
+  let applied=0, added=0;
+
+  invMatchContext.forEach((item,i)=>{
+    const chk = document.getElementById('chk-'+i);
+    if(!chk||!chk.checked) return;
+
+    const newInv = {num:invNum, url:invPdf?'':invUrl, pdf:invPdf, fileName:invFileName};
+
+    if(item.matchType==='match'&&item.matchId!=null){
+      const idx=projects[currentProject].findIndex(r=>r.id===item.matchId);
+      if(idx>=0){
+        const entry=projects[currentProject][idx];
+        const existingInvs=getInvoices(entry);
+        const isDupe=existingInvs.some(inv=>inv.num===invNum&&(inv.url===invUrl||inv.pdf===invPdf));
+        const newInvs=isDupe?existingInvs:[...existingInvs,...((invNum||invUrl||invPdf)?[newInv]:[])];
+        const existingNotes=entry.notes||'';
+        const discNote=item._discountNote||'';
+        const mergedNotes=[existingNotes,discNote].filter(Boolean).join(' | ');
+        projects[currentProject][idx]={
+          ...entry,
+          price:item.price||entry.price,
+          qty:item.qty||entry.qty,
+          invoices:newInvs,
+          supplier:invSupplier||entry.supplier,
+          notes:mergedNotes,
+          status:entry.status==='Unselected'||entry.status==='Pending'?'Approved':entry.status
+        };
+        applied++;
+      }
+    } else {
+      const schedEl=document.getElementById('new-sched-'+i);
+      const itemEl=document.getElementById('new-item-'+i);
+      const sched=(schedEl&&schedEl.value?schedEl.value:null)||item.suggestedSchedule||currentSchedule||SCHEDULES[0];
+      const itemName=(itemEl?itemEl.value:null)||item.suggestedItem||item.invoiceDesc;
+      const existing=(projects[currentProject]||[]).filter(r=>r.schedule===sched);
+      const prefix=sched.replace(/[^A-Za-z]/g,'').substring(0,4).toUpperCase();
+      let suffix=existing.length+1;
+      const existingIds=new Set(existing.map(r=>r.itemId));
+      while(existingIds.has(prefix+'-NEW.'+suffix))suffix++;
+      projects[currentProject].push({
+        id:nextId++,schedule:sched,itemId:prefix+'-NEW.'+suffix,
+        designerItemId:'',location:'',item:itemName,
+        description:item.invoiceDesc,qty:item.qty||0,price:item.price||0,
+        budgetPrice:0,supplier:invSupplier,
+        invoices:invNum||invUrl||invPdf?[newInv]:[],
+        specUrl:'',specPdf:'',notes:item._discountNote||'',status:'Approved'
+      });
+      added++;
+    }
+  });
+
+  // Reset modal
+  invMatchContext=[];
+  _invFileData=null;
+  const nEl=document.getElementById('inv-file-name');if(nEl)nEl.textContent='';
+  const fEl=document.getElementById('inv-extracted-fields');if(fEl)fEl.style.display='none';
+  const aBtn=document.getElementById('inv-apply-btn');if(aBtn)aBtn.style.display='none';
+  const stEl=document.getElementById('inv-extract-status');if(stEl)stEl.textContent='';
+  try{switchInvTab('url');}catch(e){}
+  ['inv-number','inv-url','inv-url-ref','inv-supplier','inv-date'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.value='';
+  });
+  hideModal('invoice-modal');
+  buildNav();renderTable();
+  if(applied||added)alert('Applied '+applied+' match(es), added '+added+' new entr'+(added===1?'y':'ies')+'.');
 }
 
 /* ============================================================
@@ -2034,6 +2174,249 @@ function clearApiKey(){
   document.getElementById('apikey-status').textContent = 'Key cleared.';
 }
 
+
+/* ============================================================
+   SPEC SHEET UPLOAD + MATCHING
+   ============================================================ */
+let _specFileData = null;
+let _specFileIsUrl = true;
+let _specMatchContext = [];
+
+function switchSpecTab(tab){
+  _specFileIsUrl = tab==='url';
+  document.getElementById('spec-input-url').style.display  = _specFileIsUrl?'':'none';
+  document.getElementById('spec-input-file').style.display = _specFileIsUrl?'none':'';
+  document.getElementById('spec-tab-url').style.background  = _specFileIsUrl?'#5f6f82':'#f8fafc';
+  document.getElementById('spec-tab-url').style.color       = _specFileIsUrl?'#fff':'var(--text-muted)';
+  document.getElementById('spec-tab-file').style.background = _specFileIsUrl?'#f8fafc':'#5f6f82';
+  document.getElementById('spec-tab-file').style.color      = _specFileIsUrl?'var(--text-muted)':'#fff';
+}
+
+function handleSpecFile(input){
+  if(input.files[0]) processSpecFile(input.files[0]);
+}
+
+function processSpecFile(file){
+  const allowed=['application/pdf','image/png','image/jpeg','image/webp'];
+  if(!allowed.includes(file.type)){alert('Please upload a PDF or image file.');return;}
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const dataUri=e.target.result;
+    _specFileData={base64:dataUri.split(',')[1],mediaType:file.type,name:file.name,dataUri:dataUri};
+    const nEl=document.getElementById('spec-file-name');
+    if(nEl)nEl.textContent='✓ '+file.name+' ('+(file.size/1024).toFixed(0)+' KB)';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function extractSpec(){
+  if(!_anthropicKey){showModal('apikey-modal');return;}
+  const btn=document.getElementById('spec-extract-btn');
+  const status=document.getElementById('spec-extract-status');
+  const fields=document.getElementById('spec-extracted-fields');
+  const matchDiv=document.getElementById('spec-matches');
+
+  status.textContent='Reading spec sheet...';
+  btn.disabled=true;
+  fields.style.display='none';
+  matchDiv.innerHTML='';
+
+  const schedRows=(projects[currentProject]||[]).map(r=>({
+    id:r.id,schedule:r.schedule,itemId:r.itemId,location:r.location,item:r.item,description:r.description||''
+  }));
+
+  const taskPrompt=`You are reading a product specification sheet. Extract the product details and match them to schedule entries.
+
+Return ONLY valid JSON in this exact shape, no markdown:
+{
+  "productName": "string — name of the product on the spec sheet",
+  "manufacturer": "string or null",
+  "modelNumber": "string or null",
+  "matches": [
+    {
+      "id": existing entry id (number),
+      "itemId": "e.g. ACC-1.1",
+      "label": "ItemID — Location — Item",
+      "confidence": "high" | "medium" | "low",
+      "reason": "brief explanation of why this matches"
+    }
+  ]
+}
+
+Match the spec sheet product against these existing schedule entries:
+${JSON.stringify(schedRows)}
+
+Return all entries that could plausibly be this product. A spec sheet for a single product may apply to multiple locations/units.`;
+
+  try{
+    let messages;
+    if(_specFileIsUrl){
+      const url=(document.getElementById('spec-url')||{}).value||'';
+      if(!url.trim()){status.textContent='Enter a URL first.';btn.disabled=false;return;}
+      messages=[{role:'user',content:taskPrompt+'\n\nSpec sheet URL: '+url}];
+    } else {
+      if(!_specFileData){status.textContent='Attach a file first.';btn.disabled=false;return;}
+      const isPdf=_specFileData.mediaType==='application/pdf';
+      const cb=isPdf
+        ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:_specFileData.base64}}
+        :{type:'image',source:{type:'base64',media_type:_specFileData.mediaType,data:_specFileData.base64}};
+      messages=[{role:'user',content:[cb,{type:'text',text:taskPrompt}]}];
+    }
+
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':_anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages})
+    });
+    const data=await resp.json();
+    if(data.error)throw new Error(data.error.message||'API error');
+    const text=(data.content||[]).map(b=>b.text||'').join('');
+    let parsed;
+    try{parsed=JSON.parse(text.replace(/```json|```/g,'').trim());}
+    catch(e){status.textContent='Could not parse response. Try again.';btn.disabled=false;console.error(text);return;}
+
+    _specMatchContext={
+      parsed,
+      specUrl:_specFileIsUrl?(document.getElementById('spec-url')||{}).value||'':'',
+      specPdf:(!_specFileIsUrl&&_specFileData)?_specFileData.dataUri:null,
+      specFileName:_specFileData?_specFileData.name:null
+    };
+
+    renderSpecMatches(parsed);
+    fields.style.display='';
+    const applyBtn=document.getElementById('spec-apply-btn');
+    if(applyBtn)applyBtn.style.display='';
+    status.textContent=(parsed.matches||[]).length+' match(es) found for: '+(parsed.productName||'product');
+
+  } catch(e){
+    status.textContent='Error: '+e.message;
+    console.error(e);
+  }
+  btn.disabled=false;
+  btn.textContent='✨ Identify & match';
+}
+
+function renderSpecMatches(parsed){
+  const div=document.getElementById('spec-matches');
+  const matches=parsed.matches||[];
+  if(!matches.length){div.innerHTML='<p style="font-size:12px;color:var(--text-muted)">No matching entries found. The spec may be for an item not yet in the schedule.</p>';return;}
+
+  const confColor={high:'#137333',medium:'#8a4b00',low:'#b3261e'};
+  const confBg={high:'#e6f4ea',medium:'#fff4e5',low:'#fdecea'};
+
+  div.innerHTML=`<div style="background:#f0f6ff;border:0.5px solid #c7d8f8;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:12px">
+    <strong>${parsed.productName||'Product'}</strong>${parsed.manufacturer?' — '+parsed.manufacturer:''}${parsed.modelNumber?' ('+parsed.modelNumber+')':''}
+  </div>`+matches.map((m,i)=>{
+    const conf=m.confidence||'medium';
+    return`<div class="match-item" id="spec-match-${i}" style="border-color:#c7d8f8;background:#f0f6ff">
+      <input type="checkbox" id="spec-chk-${i}" checked style="accent-color:var(--slate);flex-shrink:0" onchange="toggleSpecMatch(${i})">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <span style="font-size:12px;font-weight:500;color:var(--text)">${m.label||m.itemId||''}</span>
+          <span style="font-size:9.5px;font-weight:600;padding:1px 6px;border-radius:8px;background:${confBg[conf]};color:${confColor[conf]}">${conf} confidence</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted)">${m.reason||''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSpecMatch(i){
+  const chk=document.getElementById('spec-chk-'+i);
+  const card=document.getElementById('spec-match-'+i);
+  if(chk&&card)card.classList.toggle('selected',chk.checked);
+}
+
+function applySpecMatches(){
+  if(!_specMatchContext)return;
+  const {parsed,specUrl,specPdf,specFileName}=_specMatchContext;
+  const matches=parsed.matches||[];
+  let applied=0;
+
+  matches.forEach((m,i)=>{
+    const chk=document.getElementById('spec-chk-'+i);
+    if(!chk||!chk.checked)return;
+    const idx=projects[currentProject].findIndex(r=>r.id===m.id);
+    if(idx>=0){
+      projects[currentProject][idx]={
+        ...projects[currentProject][idx],
+        specUrl:specUrl||projects[currentProject][idx].specUrl||'',
+        specPdf:specPdf||projects[currentProject][idx].specPdf||''
+      };
+      applied++;
+    }
+  });
+
+  // Reset modal
+  _specMatchContext=null;
+  _specFileData=null;
+  const nEl=document.getElementById('spec-file-name');if(nEl)nEl.textContent='';
+  const fEl=document.getElementById('spec-extracted-fields');if(fEl)fEl.style.display='none';
+  const aBtn=document.getElementById('spec-apply-btn');if(aBtn)aBtn.style.display='none';
+  const stEl=document.getElementById('spec-extract-status');if(stEl)stEl.textContent='';
+  const urlEl=document.getElementById('spec-url');if(urlEl)urlEl.value='';
+  try{switchSpecTab('url');}catch(e){}
+  hideModal('spec-modal');
+  buildNav();renderTable();
+  if(applied)alert('Spec sheet attached to '+applied+' item(s).');
+}
+
+
+/* ============================================================
+   SHARE PANEL — role-based links per project
+   ============================================================ */
+const ROLE_DESCS = {
+  trade:      {label:'Trade',      desc:'Status + item info. No pricing.',  color:'#92400e', bg:'#fef3c7'},
+  client:     {label:'Client',     desc:'Pricing + status visible.',        color:'#1a56db', bg:'#ebf5fb'},
+  supervisor: {label:'Supervisor', desc:'Full view, no admin/edit tools.',  color:'#065f46', bg:'#ecfdf5'},
+  admin:      {label:'Admin',      desc:'Full access.',                     color:'#6d28d9', bg:'#ede9fe'},
+};
+
+function buildSharePanel(){
+  const panel = document.getElementById('share-panel-list');
+  if(!panel) return;
+
+  const base = window.location.origin + window.location.pathname;
+  const rows = Object.entries(projects).map(([proj])=>{
+    // Find all tokens for this project
+    const projTokens = Object.entries(ROLE_TOKENS).filter(([,v])=>v.project===proj);
+    if(!projTokens.length) return '';
+
+    const roleRows = projTokens.map(([tok, {role}])=>{
+      const rd = ROLE_DESCS[role]||{label:role,desc:'',color:'#374151',bg:'#f8fafc'};
+      const url = base+'?token='+tok;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:0.5px solid #f3f4f6">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+            <span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:8px;background:${rd.bg};color:${rd.color}">${rd.label}</span>
+            <span style="font-size:11px;color:var(--text-muted)">${rd.desc}</span>
+          </div>
+          <div style="font-size:10.5px;color:#6b7280;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${url}</div>
+        </div>
+        <button onclick="copyShareUrl('${url}',this)" style="background:#5f6f82;color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">Copy</button>
+      </div>`;
+    }).join('');
+
+    return `<div style="background:#fff;border:0.5px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:12px">
+      <div style="padding:10px 14px;background:#f8fafc;border-bottom:0.5px solid #e5e7eb;font-size:13px;font-weight:600;color:#111827">${proj}</div>
+      ${roleRows}
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = rows || '<p style="font-size:12px;color:var(--text-muted)">No projects found.</p>';
+}
+
+function copyShareUrl(url, btn){
+  navigator.clipboard.writeText(url).then(()=>{
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    btn.style.background = '#137333';
+    setTimeout(()=>{btn.textContent=orig;btn.style.background='#5f6f82';}, 1800);
+  }).catch(()=>{
+    prompt('Copy this link:', url);
+  });
+}
+
 (function bootApp(){
   const app = document.getElementById('main-app');
   const tradeBanner = document.getElementById('trade-banner');
@@ -2048,41 +2431,77 @@ function clearApiKey(){
     return;
   }
 
-  if (ACCESS_MODE === 'trade') {
-    // Lock to this project only, trade view
-    currentProject = ACCESS_PROJECT;
-    isTradeView = true;
+  // ── Role-based access setup ──────────────────────────────────────────────────
+  const ROLE_LABELS = {
+    trade:      '🔒 Trade view',
+    client:     '👤 Client view',
+    supervisor: '👁 Supervisor view',
+    admin:      null
+  };
+  const ROLE_COLORS = {
+    trade:      '#92400e',
+    client:     '#1a56db',
+    supervisor: '#065f46',
+    admin:      null
+  };
+  const ROLE_BG = {
+    trade:      '#fef3c7',
+    client:     '#ebf5fb',
+    supervisor: '#ecfdf5',
+    admin:      null
+  };
 
-    // Hide project switcher and admin buttons
+  if (['trade','client','supervisor'].includes(ACCESS_MODE)) {
+    currentProject = ACCESS_PROJECT;
+
+    // Lock project switcher to this project
     const projSel = document.getElementById('proj-select');
-    if (projSel) projSel.style.display = 'none';
+    if (projSel) {
+      projSel.style.display = 'none';
+      [...projSel.options].forEach(o => { if(o.value!==ACCESS_PROJECT) o.remove(); });
+    }
 
     // Update title
     const t = document.getElementById('proj-title');
     if (t) t.textContent = ACCESS_PROJECT;
 
-    // Apply read-only CSS class
-    app.classList.add('readonly-mode');
+    // Show role banner
+    tradeBanner.style.display = 'flex';
+    tradeBanner.style.background = ROLE_BG[ACCESS_MODE]||'#fef3c7';
+    tradeBanner.style.borderBottomColor = ROLE_COLORS[ACCESS_MODE]||'#f59e0b';
+    const exitBtn = tradeBanner.querySelector('button');
 
-    // Remove project switcher options except this one
-    if (projSel) {
-      [...projSel.options].forEach(o => {
-        if (o.value !== ACCESS_PROJECT) o.remove();
-      });
+    // Trade and client = fully read-only, no exit
+    if(ACCESS_MODE==='trade'||ACCESS_MODE==='client'){
+      app.classList.add('readonly-mode');
+      if(exitBtn) exitBtn.style.display='none';
+      isTradeView = true;
+    }
+    // Supervisor = can see everything but no admin tools, no edit
+    if(ACCESS_MODE==='supervisor'){
+      app.classList.add('readonly-mode');
+      if(exitBtn) exitBtn.style.display='none';
     }
 
-    // Show trade banner
-    tradeBanner.style.display = 'flex';
-    // Remove exit button from trade banner (trade users can't exit)
-    const exitBtn = tradeBanner.querySelector('button');
-    if (exitBtn) exitBtn.style.display = 'none';
-    tradeBanner.querySelector('span').textContent =
-      '\uD83D\uDD12 Read-only view \u2014 ' + ACCESS_PROJECT;
+    const bannerSpan = tradeBanner.querySelector('span');
+    if(bannerSpan){
+      bannerSpan.style.color = ROLE_COLORS[ACCESS_MODE]||'#92400e';
+      bannerSpan.textContent = (ROLE_LABELS[ACCESS_MODE]||'') + ' — ' + ACCESS_PROJECT;
+    }
   }
 
   buildNav();
   renderTable();
   updateMobileMenu();
+
+  // Wire spec file drop zone
+  const specZone=document.getElementById('spec-drop-zone');
+  if(specZone){
+    specZone.addEventListener('click',()=>document.getElementById('spec-file-input').click());
+    specZone.addEventListener('dragover',e=>{e.preventDefault();specZone.style.borderColor='var(--slate)';});
+    specZone.addEventListener('dragleave',()=>specZone.style.borderColor='');
+    specZone.addEventListener('drop',e=>{e.preventDefault();specZone.style.borderColor='';const f=e.dataTransfer.files[0];if(f)processSpecFile(f);});
+  }
 
   // Populate invoice supplier datalist on modal open
   document.querySelectorAll('[onclick*="invoice-modal"]').forEach(el=>{
@@ -2127,6 +2546,55 @@ function clearApiKey(){
 </div>
 
 
+
+<!-- SPEC SHEET UPLOAD MODAL -->
+<div class="overlay" id="spec-modal">
+<div class="modal wide">
+  <div class="mhdr"><h2>&#128209; Spec sheet upload</h2><button class="close" onclick="hideModal('spec-modal')">&#215;</button></div>
+  <div class="mbody">
+    <div class="section-title" style="margin-top:0">Upload spec sheet</div>
+    <p style="font-size:11.5px;color:var(--text-muted);margin-bottom:12px">Upload via URL or attach a file. Claude will identify which schedule item this spec belongs to.</p>
+
+    <div style="display:flex;gap:0;border:0.5px solid var(--border-med);border-radius:8px;overflow:hidden;margin-bottom:14px">
+      <button id="spec-tab-url" onclick="switchSpecTab('url')" style="flex:1;padding:9px;font-size:12px;font-weight:500;border:none;background:#5f6f82;color:#fff;cursor:pointer">URL / Link</button>
+      <button id="spec-tab-file" onclick="switchSpecTab('file')" style="flex:1;padding:9px;font-size:12px;font-weight:500;border:none;background:#f8fafc;color:var(--text-muted);cursor:pointer;border-left:0.5px solid var(--border-med)">Attach file</button>
+    </div>
+
+    <div id="spec-input-url">
+      <div class="field">
+        <label>Spec sheet URL (Google Drive, Dropbox, web link)</label>
+        <input type="text" id="spec-url" placeholder="https://drive.google.com/file/d/..." style="font-size:13px;padding:8px 10px">
+      </div>
+    </div>
+
+    <div id="spec-input-file" style="display:none">
+      <label style="display:block;border:2px dashed var(--border-med);border-radius:8px;padding:24px;text-align:center;cursor:pointer;color:var(--text-muted);font-size:13px" id="spec-drop-zone">
+        <div style="font-size:28px;margin-bottom:6px">&#128209;</div>
+        <div>Drop PDF or image here, or <span style="color:var(--slate);font-weight:500">click to browse</span></div>
+        <div style="font-size:11px;margin-top:4px">PDF, PNG, JPG, WEBP supported</div>
+        <input type="file" id="spec-file-input" accept=".pdf,.png,.jpg,.jpeg,.webp" style="display:none" onchange="handleSpecFile(this)">
+      </label>
+      <div id="spec-file-name" style="margin-top:8px;font-size:12px;color:var(--text-muted)"></div>
+    </div>
+
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-slate btn-sm" onclick="extractSpec()" id="spec-extract-btn">&#10024; Identify &amp; match</button>
+      <span id="spec-extract-status" style="font-size:11.5px;color:var(--text-muted)"></span>
+    </div>
+
+    <div id="spec-extracted-fields" style="display:none;margin-top:16px">
+      <div class="section-title">Matched items — review &amp; approve</div>
+      <p style="font-size:11.5px;color:var(--text-muted);margin-bottom:10px">Check the items you want this spec sheet attached to, then click Apply.</p>
+      <div id="spec-matches"></div>
+    </div>
+  </div>
+  <div class="mftr">
+    <button class="btn btn-white btn-sm" onclick="hideModal('spec-modal')">Cancel</button>
+    <button class="btn btn-sm" id="spec-apply-btn" style="background:var(--slate);color:#fff;display:none" onclick="applySpecMatches()">Apply selected</button>
+  </div>
+</div>
+</div>
+
 <!-- API KEY MODAL -->
 <div class="overlay" id="apikey-modal">
 <div class="modal narrow">
@@ -2155,7 +2623,7 @@ function clearApiKey(){
 <div class="modal narrow">
   <div class="mhdr"><h2>&#128279; Share project links</h2><button class="close" onclick="hideModal('share-modal')">&#215;</button></div>
   <div class="mbody">
-    <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Send these links to trades and design partners. Each link gives read-only access to that project only. Links work without a login.</p>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">Each project has four role-based links. Copy and send the right link — Trade, Client, Supervisor, or Admin. No login required.</p>
     <div class="share-panel" id="share-panel-list"></div>
     <div style="margin-top:14px;padding:12px;background:#fef3c7;border-radius:6px;border:0.5px solid #fcd34d">
       <p style="font-size:11.5px;color:#92400e;font-weight:500;margin-bottom:4px">&#9888; Link security</p>
