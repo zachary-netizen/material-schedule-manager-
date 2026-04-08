@@ -989,7 +989,7 @@ const EXTRA_FIELD_LABELS={
 };
 
 // T13: Supplier directory
-const // Supplier directory — persisted in localStorage
+// Supplier directory — persisted in localStorage
 const DEFAULT_SUPPLIER_DB = {
   'Kohlerce Supply':{contact:'James Kohler',phone:'416-555-0101',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e98388848c9aa9828681858c9b8a8c9a9c99998590c78a88">[email&#160;protected]</a>',address:'120 Industry Pkwy, Toronto ON M1K 2P4'},
   'Emser Tile':{contact:'Sandra Wu',phone:'905-555-0188',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0c7f7b794c69617f697e226f6361">[email&#160;protected]</a>',address:'45 Tile Court, Mississauga ON L5B 3T2'},
@@ -2331,9 +2331,11 @@ function renderInvoiceMatches(items){
             <input id="new-item-${i}" type="text" list="inv-item-list-${i}" value="${item.suggestedItem||''}" placeholder="${item.invoiceDesc||'Item name'}" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border-med);border-radius:4px;width:100%">
             <datalist id="inv-item-list-${i}">${(SCHEDULE_ITEMS[item.suggestedSchedule||'']||[]).map(n=>'<option value="'+n+'">').join('')}</datalist>
           </div>
-        </div>`:''}============================================================
-   DATA & STATE
-   =============================================
+        </div>` : ''}
+
+
+
+
 /* ============================================================
    DATA & STATE
    ============================================================ */
