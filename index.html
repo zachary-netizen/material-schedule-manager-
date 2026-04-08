@@ -181,6 +181,12 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
 .var-pos{color:#0b8043;font-weight:500}
 .var-neg{color:#b3261e;font-weight:500}
 
+/* BULK EDIT */
+.bulk-bar{display:none;position:sticky;top:0;z-index:100;background:#1e3a5f;color:#fff;padding:10px 16px;align-items:center;gap:12px;font-size:12px;border-bottom:2px solid #2563eb}
+.bulk-bar.active{display:flex}
+.bulk-count{font-weight:600}
+.row-checkbox{accent-color:var(--slate);width:14px;height:14px;cursor:pointer;flex-shrink:0}
+
 /* RESPONSIBILITY COLUMNS */
 .resp-cell{text-align:center;font-size:10.5px;padding:4px 6px}
 .resp-cell.done{background:#f0fdf4;color:#137333;font-weight:500}
@@ -405,10 +411,10 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
       <button class="btn btn-ghost btn-sm" onclick="showModal('invoice-modal')" title="T4: Invoice upload">&#128190; Invoice</button>
       <button class="btn btn-ghost btn-sm" onclick="showModal('spec-modal')" title="Spec sheet upload">&#128209; Spec</button>
       <button class="btn btn-ghost btn-sm" onclick="showExportModal()" title="T3: Export PDFs">&#8659; Export</button>
-      <button class="btn btn-ghost btn-sm" onclick="enterTradeView()" title="T12: Trade-safe link">&#128279; Trade view</button>
       <button class="btn btn-admin btn-sm" id="admin-btn" onclick="toggleAdmin()" title="T9/T11: Admin tools">&#9733; Admin</button>
       <button class="btn btn-ghost btn-sm" id="prefill-editor-btn" onclick="openPrefillEditor()" title="Edit prefill options" style="display:none;font-size:11px">&#9998; Prefills</button>
       <button class="btn btn-ghost btn-sm" onclick="showModal('share-modal')" title="Share project links">&#128279; Share links</button>
+      <button class="btn btn-ghost btn-sm" id="supplier-dir-btn" onclick="openSupplierDirectory()" title="Supplier directory" style="display:none">&#128101; Suppliers</button>
       <button class="btn btn-ghost btn-sm" id="resp-matrix-btn" onclick="showRespMatrix()" title="Responsibility matrix" style="display:none">&#128101; Responsibility</button>
       <button class="btn btn-white btn-sm" id="new-proj-btn" onclick="showModal('new-project-modal')" style="display:none">+ New project</button>
       <button class="btn btn-white btn-sm" onclick="openAddEntry()" title="T10: Add entry">+ Add entry</button>
@@ -422,7 +428,6 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
   <div class="mobile-menu-item" onclick="showModal('import-modal')">&#8679; Import</div>
   <div class="mobile-menu-item" onclick="showModal('invoice-modal')">&#128190; Invoice</div>
   <div class="mobile-menu-item" onclick="showExportModal()">&#8659; Export</div>
-  <div class="mobile-menu-item" onclick="enterTradeView()">&#128279; Trade view</div>
   <div class="mobile-menu-item" id="mob-admin-btn" onclick="toggleAdmin()">&#9733; Admin</div>
   <div class="mobile-menu-item" onclick="showModal('new-project-modal')">+ New project</div>
   <div class="mobile-menu-item" onclick="showModal('share-modal')">&#128279; Share</div>
@@ -433,17 +438,33 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
   <!-- STATS ROW -->
   <div class="stats" id="stats-row"></div>
 
-  <!-- RESPONSIBILITY HEADER -->
-  <div id="resp-header" style="background:#f8fafc;border-bottom:1px solid var(--border);padding:10px 16px;display:none">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap" id="resp-header-roles"></div>
-      <div id="resp-notify-btn-wrap" style="display:none">
-        <button onclick="sendUnselectedNotifications()" style="font-size:11.5px;padding:5px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:500">
-          &#128276; Notify — items unselected
-        </button>
-      </div>
+  <!-- BULK EDIT BAR -->
+  <div class="bulk-bar" id="bulk-bar">
+    <span class="bulk-count" id="bulk-count">0 selected</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="bulk-status-sel" style="font-size:12px;padding:4px 8px;border-radius:5px;border:none;background:#2d5282;color:#fff">
+        <option value="">Change status…</option>
+        <option>Unselected</option><option>Approved</option><option>Ordered</option><option>Installed</option>
+      </select>
+      <button onclick="bulkApplyStatus()" style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:500">Apply</button>
+      <select id="bulk-resp-field" style="font-size:12px;padding:4px 8px;border-radius:5px;border:none;background:#2d5282;color:#fff">
+        <option value="">Set responsibility…</option>
+        <option value="respSelection">Selection</option>
+        <option value="respApproval">Approval</option>
+        <option value="respPurchasing">Purchasing</option>
+      </select>
+      <select id="bulk-resp-val" style="font-size:12px;padding:4px 8px;border-radius:5px;border:none;background:#2d5282;color:#fff">
+        <option value="">— person —</option>
+        <option>Designer</option><option>Client</option><option>Contractor</option>
+        <option>Trade</option><option>Admin</option><option>Supervisor</option>
+      </select>
+      <button onclick="bulkApplyResp()" style="background:#2563eb;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:500">Apply</button>
     </div>
+    <div style="flex:1"></div>
+    <button onclick="bulkClear()" style="background:none;color:rgba(255,255,255,0.7);border:0.5px solid rgba(255,255,255,0.3);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer">✕ Clear</button>
   </div>
+
+  
 
   <!-- TOOLBAR -->
   <div class="toolbar">
@@ -677,14 +698,1671 @@ tbody td{padding:6px 8px;font-size:11.5px;vertical-align:middle;color:var(--text
   <h3 id="pop-name"></h3>
   <p class="pop-label">Contact</p><p id="pop-contact"></p>
   <p class="pop-label" style="margin-top:6px">Phone</p><p id="pop-phone"></p>
+  <p class="pop-label" style="margin-top:6px">Website</p><p id="pop-website"></p>
+  <p class="pop-label" style="margin-top:6px">Notes</p><p id="pop-notes"></p>
+  <button id="pop-edit-btn" onclick="" style="margin-top:10px;background:var(--slate);color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:11.5px;cursor:pointer;width:100%">✎ Edit supplier</button>
 </div>
 
 <script>
 /* ============================================================
    DATA & STATE
+   =============================================
+/* ============================================================
+   DATA & STATE
    ============================================================ */
 const SCHEDULES=['Accessories','Appliance','Door and Trim','Electrical and Low Voltage','Flooring','Hardware','Lighting','Other','Paint','Plumbing','Stone','Tile'];
 const STATUSES=['Unselected','Approved','Ordered','Installed'];
+
+// Schedule prefix codes for item IDs
+const SCHEDULE_PREFIXES = {
+  'Accessories':'ACC','Appliance':'APP','Tile':'TIL','Flooring':'FLR',
+  'Door and Trim':'DOR','Lighting':'LGT','Electrical and Low Voltage':'ELV',
+  'Paint':'PNT','Plumbing':'PLM','Specialty Wall Finish':'WAL',
+  'Stone':'STN','Hardware':'HRD','Other':'OTH'
+};
+
+// Prefill item names per schedule (from master list)
+const SCHEDULE_ITEMS = {
+  'Accessories':['Glass Handle','Glass Hinges','Makeup Mirror','Mirror','Paper Holder','Reserve Paper Holder','Robe Hook','Shower Curtain and Rod','Shower Grab Bar','Soap Dish / Shelf','Toilet Brush Holder','Towel Bar','Towel Ring','Towel Shelf'],
+  'Appliance':['BBQ','Coffee Machine','Column Freezer','Column Fridge','Cooktop','Dishwasher','Dishwasher Drawer','Dryer','Freezer','Fridge','Fridge/Freezer','Hood Fan','Hood Insert','Ice Maker','Microwave','Microwave Drawer','Microwave Hood Fan','Outdoor Fridge','Range','Speed Oven','Steam Oven','Undercounter Fridge','Wall Oven','Warming Drawer','Washer','Wine Fridge','Stacking Kit'],
+  'Tile':['Backsplash Tile','Baseboard Tile','Bathroom Floor Tile','Feature Wall Tile','Floor Tile','Full Height Backsplash Tile','Shower Bench Tile','Shower Ceiling Tile','Shower Curb','Shower Floor Tile','Shower Niche Tile','Shower Wall Tile','Tile Cap Trim','Tile Edge Trim','Tub Deck Tile','Tub Enclosure Ceiling Tile','Tub Enclosure Wall Tile','Wall Tile','Wall Tile (Above 42")','Wall Tile (Up to 42")'],
+  'Flooring':['Carpet','Carpet Tile','Concrete Finish','Engineered Hardwood','Epoxy Floor','Laminate Flooring','Luxury Vinyl Plank (LVP)','Luxury Vinyl Tile (LVT)','Rubber Flooring','Site-Finished Hardwood','Solid Hardwood','Vinyl Sheet Flooring','Wood Reducer'],
+  'Door and Trim':['Backband','Baseboard','Chair Rail','Crown Moulding','Door','Door Casing','Door Jamb','Door Stop','Panel Moulding','Picture Rail','Shoe Moulding','Window Apron','Window Casing','Window Skirt','Window Stool','Window Jambs'],
+  'Lighting':['BBQ Light','Ceiling Light Fixture','Driveway Accent Lighting','Exterior Sconce','Island Pendant Light','Landscape Lighting','Motion Light','Pantry Strip Light','Pendant Light','Potlight','Soffit Potlight','Stair Light','String Lights','Strip Light','Toe Kick Lighting','Trimless Potlight','Under Cabinet Lighting','Vanity Sconce','Wall Sconce'],
+  'Electrical and Low Voltage':['Camera System','Ceiling Speakers','Doorbell','Doorbell Camera','Exhaust Fan','In-Floor Heating','Motion Sensors','Network Data Port','Security System','Smart Home Hub','Subwoofer Rough-In','TV Rough-In','Wall Speakers','WiFi Access Point'],
+  'Paint':['Accent Walls Paint','Baseboards Paint','Ceiling Paint','Closet Interiors Paint','Door Frames Paint','Exterior Doors Paint','Exterior Trim Paint','Garage Door Paint','Interior Doors Paint','Millwork / Built-Ins Paint','Soffits Paint','Stair Railings Paint','Stair Stringers Paint','Trim Paint','Walls Paint','Window Trim Paint'],
+  'Plumbing':['Kitchen Sink','Kitchen Faucet','Vanity Sink','Vanity Faucet','Laundry Sink','Laundry Faucet','Pantry Sink','Pantry Faucet','Bar Sink','Bar Faucet','Toilet','Bathtub','Shower Kit','Shower Drain','Shower Linear Drain','Floor Drain','Garburator','Instant Hot Water','Water Filtration System','Pot Filler','Hot/Cold Tap Faucet','Toilet Trip Lever','Tub Filler','Body Jets','Steam Unit','Sauna Kit','Hose Bib','Irrigation System','Water Softener','Backflow Preventer','Sump Pump','Backup Sump Pump Battery and Alarm','24" Vanity (Prefab)','30" Vanity (Prefab)','36" Vanity (Prefab)','42" Vanity (Prefab)','54" Vanity (Prefab)','60" Vanity (Prefab)','72" Vanity (Prefab)','96" Vanity (Prefab)','24" Vanity (Custom)','30" Vanity (Custom)','36" Vanity (Custom)','42" Vanity (Custom)','54" Vanity (Custom)','60" Vanity (Custom)','72" Vanity (Custom)','96" Vanity (Custom)','2 Piece Shower Kit','3 Piece Shower Kit'],
+  'Specialty Wall Finish':['Wallpaper','Wallcovering','Plaster Finish','Venetian Plaster','Limewash','Microcement','Concrete Finish'],
+  'Stone':['Countertop','Island Countertop','Vanity Countertop','Backsplash (Slab)','Full Height Backsplash','Stone Shower Bench','Stone Shower Curb','Stone Shower Jamb','Stone Niche Shelf','Stone Window Jamb','Stone Window Sill','Stone Door Jamb','Fireplace Surround','Feature Wall Slab','Bench','Stair Tread / Landing','Baseboard (Stone)'],
+  'Hardware':['Hinges','Concealed Hinges','Passage Handle','Privacy Handle','Dummy Handle','Keyed Entry Handle','Exterior Entry Handle Set','Deadbolt','Pocket Door Track','Pocket Door Hardware Set','Pocket Door Passage Set','Bypass Door Track','Flush Pull','Magnetic Catch','Door Stop Hardware','Strike Plate','Latch','Door Sweep','Threshold','Weatherstripping'],
+};
+
+// Per-line responsibility columns
+// Each stage is 'done' once status reaches a certain level
+const RESP_COLS = [
+  {key:'respSelection',  label:'Selection',  doneAt:['Approved','Ordered','Installed']},
+  {key:'respApproval',   label:'Approval',   doneAt:['Ordered','Installed']},
+  {key:'respPurchasing', label:'Purchasing', doneAt:['Installed']},
+];
+const RESP_PEOPLE = ['','Designer','Client','Contractor','Trade','Admin','Supervisor'];
+
+// T2: Schedule-specific field configs
+const SCHEDULE_CONFIG={
+  'Tile':{extraFields:['groutColor','installLayout','materialSpec'],hidePricing:false},
+  'Paint':{extraFields:[],hidePricing:true,note:'Paint pricing managed by subcontractor — not tracked here.'},
+  'Plumbing':{extraFields:['roughIn'],hidePricing:false},
+  'Electrical and Low Voltage':{extraFields:['gangConfig','techSpec'],hidePricing:false},
+  'Appliance':{extraFields:['utilityReq','panelReady'],hidePricing:false},
+};
+
+const DESCRIPTION_HELP={
+  'Accessories':    'Manufacturer, product name, finish/colour, SKU/model number.',
+  'Tile':           'Collection, colour/finish, material type, tile size, pattern/layout, grout colour if known, SKU.',
+  'Lighting':       'Manufacturer, fixture name, finish/colour, fixture type, lamp/bulb type if applicable, dimensions, mounting type, SKU/model number.',
+  'Plumbing':       'Manufacturer, product name, finish/colour, SKU/model number.',
+  'Electrical and Low Voltage': 'Manufacturer, product name, finish/colour, SKU/model number.',
+  'Appliance':      'Manufacturer, product name, finish/panel readiness, dimensions, utility requirements (Gas/Electric/Water/Drain), SKU/model number.',
+  'Stone':          'Supplier, stone type, colour/finish, thickness, edge profile.',
+  'Flooring':       'Manufacturer, product name, flooring type, colour/finish, plank dimensions, installation pattern, SKU/model number.',
+  'Door and Trim':  'Manufacturer, product name, style/profile, material, dimensions, door type, SKU/model number.',
+  'Hardware':       'Manufacturer, collection, product name, colour/finish, function, handing, SKU/model number.',
+  'Paint':          'Manufacturer, product line, colour name/code, finish/sheen, application surface, and any relevant specification notes.',
+  'Other':          'Manufacturer, product name, finish, material, size, configuration, SKU/model number.',
+};
+
+// Structured description fields per schedule
+// Each field: {key, label, placeholder}
+const SCHEDULE_DESC_FIELDS = {
+  'Flooring': [
+    {key:'manufacturer',  label:'Manufacturer',        placeholder:'e.g. Vidar'},
+    {key:'productName',   label:'Product name',         placeholder:'e.g. American Oak'},
+    {key:'flooringType',  label:'Flooring type',        placeholder:'e.g. Engineered Hardwood'},
+    {key:'colourFinish',  label:'Colour / finish',      placeholder:'e.g. Ash / Matte'},
+    {key:'plankDims',     label:'Plank dimensions',     placeholder:'e.g. 6" wide, 3/4" thick'},
+    {key:'pattern',       label:'Installation pattern', placeholder:'e.g. Straight lay'},
+    {key:'sku',           label:'SKU / model number',   placeholder:'e.g. 33jwnnsfnsio2'},
+  ],
+  'Tile': [
+    {key:'collection',   label:'Collection',          placeholder:'e.g. Klay Series'},
+    {key:'colourFinish', label:'Colour / finish',     placeholder:'e.g. Grey Matte'},
+    {key:'material',     label:'Material type',       placeholder:'e.g. Porcelain'},
+    {key:'tileSize',     label:'Tile size',           placeholder:'e.g. 12×24"'},
+    {key:'pattern',      label:'Pattern / layout',    placeholder:'e.g. Brick offset'},
+    {key:'grout',        label:'Grout colour',        placeholder:'e.g. Warm grey'},
+    {key:'sku',          label:'SKU',                 placeholder:''},
+  ],
+  'Lighting': [
+    {key:'manufacturer', label:'Manufacturer',     placeholder:'e.g. Restoration Hardware'},
+    {key:'fixtureName',  label:'Fixture name',     placeholder:''},
+    {key:'colourFinish', label:'Finish / colour',  placeholder:'e.g. Aged Brass'},
+    {key:'fixtureType',  label:'Fixture type',     placeholder:'e.g. Pendant'},
+    {key:'lampType',     label:'Lamp / bulb type', placeholder:'e.g. E26 LED'},
+    {key:'dimensions',   label:'Dimensions',       placeholder:'e.g. 12" Ø × 18" H'},
+    {key:'mounting',     label:'Mounting type',    placeholder:'e.g. Hardwired ceiling'},
+    {key:'sku',          label:'SKU',              placeholder:''},
+  ],
+  'Plumbing': [
+    {key:'manufacturer', label:'Manufacturer',    placeholder:'e.g. Kohler'},
+    {key:'productName',  label:'Product name',    placeholder:'e.g. Purist Faucet'},
+    {key:'colourFinish', label:'Finish / colour', placeholder:'e.g. Polished Chrome'},
+    {key:'sku',          label:'SKU',             placeholder:''},
+  ],
+  'Accessories': [
+    {key:'manufacturer', label:'Manufacturer',    placeholder:'e.g. Moen'},
+    {key:'productName',  label:'Product name',    placeholder:'e.g. Genta LX Paper Holder'},
+    {key:'colourFinish', label:'Finish / colour', placeholder:'e.g. Matte Black'},
+    {key:'sku',          label:'SKU',             placeholder:''},
+  ],
+  'Hardware': [
+    {key:'manufacturer', label:'Manufacturer',    placeholder:'e.g. Emtek'},
+    {key:'collection',   label:'Collection',      placeholder:'e.g. Transitional'},
+    {key:'productName',  label:'Product name',    placeholder:'e.g. Brass Cabinet Pull'},
+    {key:'colourFinish', label:'Colour / finish', placeholder:'e.g. Satin Brass'},
+    {key:'function',     label:'Function',        placeholder:'e.g. Cabinet pull'},
+    {key:'handing',      label:'Handing',         placeholder:'e.g. N/A'},
+    {key:'sku',          label:'SKU',             placeholder:''},
+  ],
+  'Appliance': [
+    {key:'manufacturer', label:'Manufacturer',       placeholder:'e.g. Miele'},
+    {key:'productName',  label:'Product name',       placeholder:'e.g. 30" Induction Range'},
+    {key:'panelReady',   label:'Finish / panel ready',placeholder:'e.g. Stainless / Yes'},
+    {key:'dimensions',   label:'Dimensions',         placeholder:'e.g. 30"W × 36"H × 26"D'},
+    {key:'utilities',    label:'Utility requirements',placeholder:'e.g. 240V / Gas'},
+    {key:'sku',          label:'SKU',                placeholder:''},
+  ],
+  'Stone': [
+    {key:'supplier',     label:'Supplier',      placeholder:'e.g. Stone Tile International'},
+    {key:'stoneType',    label:'Stone type',    placeholder:'e.g. Marble'},
+    {key:'colourFinish', label:'Colour/finish', placeholder:'e.g. Calacatta Gold / Polished'},
+    {key:'thickness',    label:'Thickness',     placeholder:'e.g. 3cm'},
+    {key:'edgeProfile',  label:'Edge profile',  placeholder:'e.g. Eased'},
+  ],
+  'Door and Trim': [
+    {key:'manufacturer', label:'Manufacturer',    placeholder:'e.g. Masonite'},
+    {key:'productName',  label:'Product name',    placeholder:'e.g. Solid Core Interior Door'},
+    {key:'style',        label:'Style / profile', placeholder:'e.g. Shaker'},
+    {key:'material',     label:'Material',        placeholder:'e.g. MDF'},
+    {key:'dimensions',   label:'Dimensions',      placeholder:'e.g. 32"×80"'},
+    {key:'doorType',     label:'Door type',       placeholder:'e.g. Swing / Sliding'},
+    {key:'sku',          label:'SKU',             placeholder:''},
+  ],
+  'Electrical and Low Voltage': [
+    {key:'manufacturer', label:'Manufacturer',    placeholder:'e.g. Lutron'},
+    {key:'productName',  label:'Product name',    placeholder:'e.g. Caseta Wireless Dimmer'},
+    {key:'colourFinish', label:'Finish / colour', placeholder:'e.g. White'},
+    {key:'sku',          label:'SKU',             placeholder:''},
+  ],
+  'Paint': [
+    {key:'manufacturer', label:'Manufacturer',    placeholder:'e.g. Benjamin Moore'},
+    {key:'productLine',  label:'Product line',    placeholder:'e.g. Aura Interior'},
+    {key:'colourCode',   label:'Colour name/code',placeholder:'e.g. White Dove OC-17'},
+    {key:'finish',       label:'Finish / sheen',  placeholder:'e.g. Eggshell'},
+    {key:'surface',      label:'Application surface',placeholder:'e.g. Walls'},
+    {key:'notes',        label:'Notes',           placeholder:''},
+  ],
+};
+
+/* ============================================================
+   PREFILL OPTIONS DATABASE
+   Common values per schedule+field — editable by admin
+   Stored in localStorage as 'prefill_options'
+   ============================================================ */
+const DEFAULT_PREFILL_OPTIONS = {
+  // ── FLOORING ──────────────────────────────────────────────
+  'Flooring.manufacturer':      ['Vidar','Lauzon','Kentwood','Shaw','Mirage','Karndean','Rubio Monocoat','Preverco'],
+  'Flooring.flooringType':      ['Engineered Hardwood','Solid Hardwood','Luxury Vinyl Plank (LVP)','Laminate','Porcelain Tile','Cork','Bamboo'],
+  'Flooring.colourFinish':      ['Natural / Matte','White Oak / Matte','Ash / Matte','Walnut / Satin','Smoke / Brushed','Grey / Wire Brushed'],
+  'Flooring.pattern':           ['Straight lay','Herringbone','Chevron','Diagonal','Random length','Parquet'],
+
+  // ── TILE ──────────────────────────────────────────────────
+  'Tile.material':              ['Porcelain','Ceramic','Natural Stone','Marble','Travertine','Slate','Glass','Cement'],
+  'Tile.pattern':               ['Straight / Grid','Brick offset (1/3)','Herringbone','Chevron','Versailles','Diagonal','Random'],
+  'Tile.grout':                 ['Bright White','Warm Grey','Charcoal','Sandstone','Silver','Antique White','Unsanded grout'],
+
+  // ── LIGHTING ──────────────────────────────────────────────
+  'Lighting.colourFinish':      ['Aged Brass','Satin Brass','Matte Black','Brushed Nickel','Polished Chrome','Oil Rubbed Bronze','Antique Gold','White'],
+  'Lighting.fixtureType':       ['Pendant','Chandelier','Flush mount','Semi-flush','Wall sconce','Track light','Recessed','Table lamp','Floor lamp'],
+  'Lighting.lampType':          ['E26 LED','E12 LED','GU10 LED','PAR30','PAR38','Integrated LED','Incandescent','Halogen'],
+  'Lighting.mounting':          ['Hardwired ceiling','Hardwired wall','Plug-in','Battery','Canopy mount','Surface mount','Recessed can'],
+
+  // ── PLUMBING ──────────────────────────────────────────────
+  'Plumbing.colourFinish':      ['Polished Chrome','Brushed Nickel','Matte Black','Brushed Gold','Oil Rubbed Bronze','Satin Brass','Polished Brass'],
+  'Plumbing.manufacturer':      ['Kohler','Moen','Delta','Hansgrohe','Grohe','American Standard','Brizo','Toto','Duravit'],
+
+  // ── ACCESSORIES ───────────────────────────────────────────
+  'Accessories.colourFinish':   ['Matte Black','Brushed Nickel','Polished Chrome','Satin Brass','Brushed Gold','Bronze','White'],
+  'Accessories.manufacturer':   ['Moen','Kohler','Delta','Grohe','Rohl','Riobel'],
+
+  // ── HARDWARE ──────────────────────────────────────────────
+  'Hardware.colourFinish':      ['Satin Brass','Matte Black','Brushed Nickel','Polished Chrome','Oil Rubbed Bronze','Antique Brass','Unlacquered Brass'],
+  'Hardware.function':          ['Cabinet pull','Cabinet knob','Door lever','Door knob','Deadbolt','Barn door pull','Flush pull','Privacy set','Passage set'],
+  'Hardware.handing':           ['N/A','Left hand','Right hand','Left hand reverse','Right hand reverse','Reversible'],
+  'Hardware.manufacturer':      ['Emtek','Baldwin','Schlage','Hafele','Richelieu','Top Knobs','Atlas Homewares','Rocky Mountain Hardware'],
+
+  // ── APPLIANCE ─────────────────────────────────────────────
+  'Appliance.colourFinish':     ['Stainless Steel','Panel Ready','Matte Black','White','Matte White','Black Stainless'],
+  'Appliance.utilities':        ['120V / Electric','240V / Electric','Gas / Natural gas','Gas / Propane','Water connection required','Drain required','Ventilation required'],
+  'Appliance.manufacturer':     ['Miele','Sub-Zero','Wolf','Bosch','Thermador','Fisher & Paykel','Dacor','Bertazzoni','Gaggenau'],
+
+  // ── STONE ─────────────────────────────────────────────────
+  'Stone.stoneType':            ['Marble','Quartzite','Granite','Quartz (engineered)','Travertine','Limestone','Slate','Onyx','Porcelain slab'],
+  'Stone.colourFinish':         ['Calacatta Gold / Polished','Statuario / Honed','Carrara / Matte','Nero Marquina / Polished','Taj Mahal / Leathered','Fantasy Brown / Leathered'],
+  'Stone.thickness':            ['2cm','3cm','4cm','5cm','1.2cm (thin porcelain)'],
+  'Stone.edgeProfile':          ['Eased','Bevelled','Bullnose','Ogee','Waterfall','Mitered','Laminated','Chiseled'],
+
+  // ── DOOR AND TRIM ─────────────────────────────────────────
+  'Door and Trim.style':        ['Shaker','Flat / Slab','Panel','Craftsman','French','Barn','Pocket','Bifold'],
+  'Door and Trim.material':     ['Solid wood','Solid core MDF','Hollow core','Glass / Steel','Steel','Fiberglass','MDF wrapped'],
+  'Door and Trim.doorType':     ['Interior swing','Interior pocket','Interior barn','Interior bifold','Exterior entry','Exterior French','Closet'],
+
+  // ── ELECTRICAL ────────────────────────────────────────────
+  'Electrical and Low Voltage.colourFinish': ['White','Ivory','Light Almond','Black','Stainless','Brushed Nickel'],
+  'Electrical and Low Voltage.manufacturer': ['Lutron','Leviton','Legrand','Eaton','Hubbell','Cooper','Pass & Seymour'],
+
+  // ── PAINT ─────────────────────────────────────────────────
+  'Paint.manufacturer':         ['Benjamin Moore','Sherwin-Williams','Farrow & Ball','Behr','PPG','Cloverdale','General Paint'],
+  'Paint.productLine':          ['Aura Interior','Regal Select','Advance','Emerald Interior','Cashmere','Studio Fine Paints'],
+  'Paint.finish':               ['Flat / Matte','Eggshell','Satin','Semi-gloss','Gloss','High-gloss'],
+  'Paint.surface':              ['Walls','Ceiling','Trim / millwork','Cabinets','Exterior','Concrete floor','Metal'],
+};
+
+// Load from localStorage (admin edits persist)
+let PREFILL_OPTIONS = (function(){
+  try {
+    const saved = localStorage.getItem('prefill_options');
+    if(saved) return JSON.parse(saved);
+  } catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULT_PREFILL_OPTIONS)); // deep copy
+})();
+
+function savePrefillOptions(){
+  try{ localStorage.setItem('prefill_options', JSON.stringify(PREFILL_OPTIONS)); }catch(e){}
+}
+
+function getPrefillKey(sched, fieldKey){
+  return sched+'.'+fieldKey;
+}
+
+function getOptions(sched, fieldKey){
+  return PREFILL_OPTIONS[getPrefillKey(sched, fieldKey)] || [];
+}
+
+function addOption(sched, fieldKey, value){
+  const k = getPrefillKey(sched, fieldKey);
+  if(!PREFILL_OPTIONS[k]) PREFILL_OPTIONS[k] = [];
+  if(!PREFILL_OPTIONS[k].includes(value)){
+    PREFILL_OPTIONS[k].push(value);
+    savePrefillOptions();
+  }
+}
+
+
+
+// Parse a structured description string back to fields
+// Format: "Manufacturer: Vidar | Product name: American Oak | ..."
+function parseStructuredDesc(desc, fields){
+  const result = {};
+  if(!desc) return result;
+  desc.split('|').forEach(part=>{
+    const colonIdx = part.indexOf(':');
+    if(colonIdx<0) return;
+    const label = part.substring(0,colonIdx).trim();
+    const value = part.substring(colonIdx+1).trim();
+    const field = fields.find(f=>f.label===label);
+    if(field) result[field.key] = value;
+  });
+  return result;
+}
+
+// Compose structured fields into a description string
+function composeStructuredDesc(values, fields){
+  return fields
+    .filter(f=>values[f.key]&&values[f.key].trim())
+    .map(f=>f.label+': '+values[f.key].trim())
+    .join(' | ');
+}
+
+const EXTRA_FIELD_LABELS={
+  groutColor:'Grout colour',installLayout:'Installation layout',materialSpec:'Material spec / SKU',
+  roughIn:'Rough-in requirements',gangConfig:'Gang configuration',techSpec:'Technical spec',
+  utilityReq:'Utility requirements',panelReady:'Panel ready',
+};
+
+// T13: Supplier directory
+const // Supplier directory — persisted in localStorage
+const DEFAULT_SUPPLIER_DB = {
+  'Kohlerce Supply':{contact:'James Kohler',phone:'416-555-0101',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e98388848c9aa9828681858c9b8a8c9a9c99998590c78a88">[email&#160;protected]</a>',address:'120 Industry Pkwy, Toronto ON M1K 2P4'},
+  'Emser Tile':{contact:'Sandra Wu',phone:'905-555-0188',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0c7f7b794c69617f697e226f6361">[email&#160;protected]</a>',address:'45 Tile Court, Mississauga ON L5B 3T2'},
+  'Lighting World':{contact:'Derek Moss',phone:'416-555-0234',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="aecacbdccbc5eec2c7c9c6dac7c0c9d9c1dcc2ca80cdcf">[email&#160;protected]</a>',address:'8 Lumen Way, North York ON M3J 1K8'},
+  'Canac':{contact:'Service Desk',phone:'1-800-555-0199',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="a4d4d6cbe4c7c5cac5c78ac7c5">[email&#160;protected]</a>',address:'200 Builder Ave, Laval QC H7L 5B4'},
+  'Stone World':{contact:'Maria Petrov',phone:'905-555-0155',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="c6aba7b4afa786b5b2a9a8a3b1a9b4aaa2e8a5a7">[email&#160;protected]</a>',address:'77 Granite Rd, Brampton ON L6T 4P9'},
+  'Goodfellow':{contact:'Trade Sales',phone:'1-800-555-0177',email:'<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="e39791828786a3848c8c8785868f8f8c94cd8082">[email&#160;protected]</a>',address:'1 Flooring Blvd, Delson QC J5B 2N3'},
+};
+
+
+let SUPPLIER_DB = (function(){
+  try{
+    const saved = localStorage.getItem('msm_suppliers');
+    if(saved){
+      const parsed = JSON.parse(saved);
+      if(parsed && Object.keys(parsed).length) return parsed;
+    }
+  }catch(e){}
+  return JSON.parse(JSON.stringify(DEFAULT_SUPPLIER_DB));
+})();
+
+function saveSupplierDB(){
+  try{ localStorage.setItem('msm_suppliers', JSON.stringify(SUPPLIER_DB)); }catch(e){}
+}
+
+
+let currentProject='627 Mcroberts Ave';
+let currentSchedule='Accessories';
+let isAdmin=false;
+let isTradeView=false;
+let editingId=null;
+let nextId=500;
+let exportHistory={};
+let invMatchContext=[];
+let splitContext=null;
+
+// T9: Responsibility matrix
+let respMatrix={};
+SCHEDULES.forEach(s=>{respMatrix[s]={selection:'',approval:'',purchasing:''};});
+
+// T11: Budget tracking
+// stored per entry as entry.budgetPrice
+
+const SEED={
+  '627 Mcroberts Ave':[
+    {id:1,schedule:'Accessories',itemId:'ACC-1.1',designerItemId:'MIR-1-1',location:'Unit 1-Bathroom',item:'Mirror',description:'Kohler Verdera 24x30, frameless, medicine cabinet',qty:1,price:380,budgetPrice:400,supplier:'Kohlerce Supply',invoiceNum:'INV-2024-001',invoiceUrl:'https://drive.google.com/',specUrl:'',notes:'',status:'Ordered'},
+    {id:2,schedule:'Accessories',itemId:'ACC-1.2',designerItemId:'',location:'Unit 1-Bathroom',item:'Paper Holder',description:'Moen Genta LX, matte black, wall mounted',qty:1,price:45,budgetPrice:50,supplier:'Kohlerce Supply',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Unselected'},
+    {id:3,schedule:'Accessories',itemId:'ACC-1.3',designerItemId:'',location:'Unit 1-Bathroom',item:'Robe Hook',description:'',qty:2,price:0,budgetPrice:70,supplier:'',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Unselected'},
+    {id:4,schedule:'Accessories',itemId:'ACC-2.1',designerItemId:'MIR-2-1',location:'Unit 2-Bathroom',item:'Mirror',description:'Kohler Verdera 24x30, frameless, medicine cabinet',qty:1,price:380,budgetPrice:400,supplier:'Kohlerce Supply',invoiceNum:'INV-2024-001',invoiceUrl:'https://drive.google.com/',specUrl:'',notes:'',status:'Ordered'},
+    {id:5,schedule:'Accessories',itemId:'ACC-2.2',designerItemId:'',location:'Unit 2-Bathroom',item:'Paper Holder',description:'',qty:1,price:0,budgetPrice:50,supplier:'',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Unselected'},
+    {id:6,schedule:'Tile',itemId:'TIL-1.1',designerItemId:'',location:'Unit 1-Bathroom',item:'Floor Tile',description:'Emser Klay 12x24 matte grey porcelain',qty:28,price:6.50,budgetPrice:7,supplier:'Emser Tile',invoiceNum:'',invoiceUrl:'',specUrl:'https://drive.google.com/',notes:'',status:'Approved',groutColor:'Mapei Warm Gray 114',installLayout:'Herringbone',materialSpec:'EKL-12-24-MGP'},
+    {id:7,schedule:'Tile',itemId:'TIL-1.2',designerItemId:'',location:'Unit 1-Bathroom',item:'Wall Tile',description:'Emser Klay 3x12 glossy white subway',qty:65,price:4.25,budgetPrice:4,supplier:'Emser Tile',invoiceNum:'',invoiceUrl:'',specUrl:'https://drive.google.com/',notes:'',status:'Approved',groutColor:'Mapei Bright White 00',installLayout:'Stacked vertical',materialSpec:'EKL-3-12-GWS'},
+    {id:8,schedule:'Lighting',itemId:'LIG-1.1',designerItemId:'',location:'Unit 1-Kitchen',item:'Pendant',description:'Kichler Seville 5-light, matte black, 60W max',qty:2,price:285,budgetPrice:300,supplier:'Lighting World',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Quoted'},
+    {id:9,schedule:'Plumbing',itemId:'PLM-1.1',designerItemId:'',location:'Unit 1-Kitchen',item:'Kitchen Faucet',description:'Moen Arbor, spot resist stainless, pull-down sprayer',qty:1,price:310,budgetPrice:350,supplier:'Canac',invoiceNum:'',invoiceUrl:'',specUrl:'https://drive.google.com/',notes:'',status:'Unselected',roughIn:'Standard 1-hole, 8" spread'},
+    {id:10,schedule:'Appliance',itemId:'APP-1.1',designerItemId:'',location:'Unit 1-Kitchen',item:'Refrigerator',description:'',qty:1,price:0,budgetPrice:2200,supplier:'',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Unselected'},
+    {id:11,schedule:'Appliance',itemId:'APP-1.2',designerItemId:'',location:'Unit 1-Kitchen',item:'Dishwasher',description:'',qty:1,price:0,budgetPrice:900,supplier:'',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Unselected'},
+    {id:12,schedule:'Paint',itemId:'PAI-1.1',designerItemId:'',location:'Unit 1-Living',item:'Wall Paint',description:'Benjamin Moore Chantilly Lace OC-65, eggshell',qty:2,price:0,budgetPrice:0,supplier:'',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'Managed by subcontractor',status:'Approved'},
+  ],
+  '42 Indian Trail':[
+    {id:100,schedule:'Stone',itemId:'STN-1.1',designerItemId:'',location:'Main-Kitchen',item:'Countertop',description:'Caesarstone Calacatta Nuvo 1141, 3cm, eased edge',qty:48,price:95,budgetPrice:100,supplier:'Stone World',invoiceNum:'',invoiceUrl:'',specUrl:'https://drive.google.com/',notes:'',status:'Approved'},
+    {id:101,schedule:'Flooring',itemId:'FLR-1.1',designerItemId:'',location:'Main-Living',item:'Hardwood',description:'Mirage Red Oak, Autumn, 4.25", semi-gloss',qty:820,price:8.75,budgetPrice:9,supplier:'Goodfellow',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Ordered'},
+    {id:102,schedule:'Appliance',itemId:'APP-M1',designerItemId:'',location:'Main-Kitchen',item:'Range',description:'',qty:1,price:0,budgetPrice:3500,supplier:'',invoiceNum:'',invoiceUrl:'',specUrl:'',notes:'',status:'Unselected'},
+  ]
+};
+
+/* ============================================================
+   PROJECT ACCESS TOKENS
+   Each project has a stable token. Share URL = ?project=KEY&token=TOKEN
+   Admin opens app normally (no URL params) = full access.
+   ============================================================ */
+const PROJECT_TOKENS = {
+  '627 Mcroberts Ave': 'mcr-8f4a2d9b',
+  '42 Indian Trail':   'ind-3c7e1f5a',
+};
+
+// Role tokens: token -> {project, role}
+// Roles: 'trade' | 'client' | 'supervisor' | 'admin'
+const ROLE_TOKENS = {
+  // 627 Mcroberts Ave
+  'mcr-8f4a2d9b':       {project:'627 Mcroberts Ave', role:'trade'},
+  'mcr-client-a3f9':    {project:'627 Mcroberts Ave', role:'client'},
+  'mcr-super-b7c2':     {project:'627 Mcroberts Ave', role:'supervisor'},
+  'mcr-admin-z9x1':     {project:'627 Mcroberts Ave', role:'admin'},
+  // 42 Indian Trail
+  'ind-3c7e1f5a':        {project:'42 Indian Trail',   role:'trade'},
+  'ind-client-d4e8':     {project:'42 Indian Trail',   role:'client'},
+  'ind-super-f2a1':      {project:'42 Indian Trail',   role:'supervisor'},
+  'ind-admin-q8w3':      {project:'42 Indian Trail',   role:'admin'},
+};
+
+// Detect access mode from URL
+const _urlParams = new URLSearchParams(window.location.search);
+const _urlToken  = _urlParams.get('token');
+const _urlProj   = _urlParams.get('project'); // human-readable hint (optional)
+
+// Column visibility — all on by default, user can toggle
+const ALL_COLS = ['itemId','location','item','description','qty','price','total','invoiceNum','specDoc','supplier','status','respSelection','respApproval','respPurchasing'];
+let hiddenCols = new Set(); // columns the user has hidden
+
+// Load API key — try localStorage first, then sessionStorage, then URL param (for local file use)
+let _anthropicKey = (function(){
+  try {
+    const ls = localStorage.getItem('anthropic_key');
+    if(ls) return ls;
+  } catch(e){}
+  try {
+    const ss = sessionStorage.getItem('anthropic_key');
+    if(ss) return ss;
+  } catch(e){}
+  // Allow passing key via URL: ?apikey=sk-ant-...  (useful for local file)
+  const urlKey = new URLSearchParams(window.location.search).get('apikey');
+  if(urlKey && urlKey.startsWith('sk-ant-')) return urlKey;
+  return '';
+})();
+
+let ACCESS_MODE   = 'admin';   // 'admin' | 'client' | 'supervisor' | 'trade' | 'invalid'
+let ACCESS_PROJECT = null;
+
+if (_urlToken) {
+  const roleEntry = ROLE_TOKENS[_urlToken];
+  if (roleEntry) {
+    ACCESS_MODE    = roleEntry.role;
+    ACCESS_PROJECT = roleEntry.project;
+    if(roleEntry.role === 'trade') isTradeView = true;
+  } else {
+    ACCESS_MODE = 'invalid';
+  }
+}
+
+// Role capability helpers
+function canSeeFinancials(){ return ['admin','supervisor','client'].includes(ACCESS_MODE); }
+function canSeeAdmin(){ return ACCESS_MODE === 'admin'; }
+function canEdit(){ return ['admin','supervisor'].includes(ACCESS_MODE); }
+function isReadOnly(){ return ['trade','client'].includes(ACCESS_MODE); }
+
+
+// Load projects from localStorage (persists across sessions)
+// Falls back to SEED data on first load
+let projects=(function(){
+  try{
+    const saved=localStorage.getItem('msm_projects');
+    if(saved){
+      const parsed=JSON.parse(saved);
+      if(parsed && Object.keys(parsed).length) return parsed;
+    }
+  }catch(e){}
+  // First load — use SEED data
+  const p={};
+  Object.keys(SEED).forEach(k=>{p[k]=SEED[k].map(r=>({...r}));});
+  return p;
+})();
+
+// Async-load file blobs from IndexedDB and re-render once ready
+loadBlobsFromFileDB(projects).then(()=>{ if(typeof renderTable==='function') renderTable(); }).catch(()=>{});
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+function fmt(n){
+  if(n===''||n===null||n===undefined)return'—';
+  const v=Number(n);
+  if(isNaN(v)||v===0)return'—';
+  return new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD',minimumFractionDigits:2}).format(v).replace('CA$','$');
+}
+function fmtNum(n){const v=Number(n);return(!v||isNaN(v))?'—':v%1===0?String(v):v.toFixed(2);}
+function getRows(){if(currentSchedule==='__all__')return projects[currentProject]||[];return(projects[currentProject]||[]).filter(r=>r.schedule===currentSchedule);}
+function allRows(){return projects[currentProject]||[];}
+function getConfig(){if(currentSchedule==='__all__')return{};return SCHEDULE_CONFIG[currentSchedule]||{};}
+function hasUnselected(s){return(projects[currentProject]||[]).some(r=>r.schedule===s&&r.status==='Unselected');}
+function showModal(id){
+  if(id==='share-modal') buildSharePanel();
+  document.getElementById(id).classList.add('open');
+}
+function hideModal(id){document.getElementById(id).classList.remove('open');}
+
+/* ============================================================
+   NAV
+   ============================================================ */
+function buildNav(){
+  const nav=document.getElementById('schedule-nav');
+  const allActive=currentSchedule==='__all__';
+  const allDot=(projects[currentProject]||[]).some(function(r){return r.status==='Unselected';})
+    ?'<span class="unsel-dot"></span>':'';
+  let html='<div class="nav-tab'+(allActive?' active':'')+' nav-tab-all" data-sched="__all__">All schedules'+allDot+'</div>';
+  SCHEDULES.forEach(function(s){
+    const dot=hasUnselected(s)?'<span class="unsel-dot"></span>':'';
+    const active=s===currentSchedule?' active':'';
+    html+='<div class="nav-tab'+active+'" data-sched="'+s.replace(/"/g,'&quot;')+'">'+s+dot+'</div>';
+  });
+  nav.innerHTML=html;
+  nav.querySelectorAll('.nav-tab').forEach(function(el){
+    el.addEventListener('click',function(){switchSchedule(this.getAttribute('data-sched'));});
+  });
+  updateMobileMenu();
+}
+
+/* ============================================================
+   STATS
+   ============================================================ */
+function calcStats(rows){
+  // Always show the same 4 status counts for all roles
+  const unselected = rows.filter(r=>r.status==='Unselected').length;
+  const selected   = rows.filter(r=>r.status==='Approved').length;
+  const ordered    = rows.filter(r=>r.status==='Ordered').length;
+  const installed  = rows.filter(r=>r.status==='Installed').length;
+
+  const statsHtml = `
+    <div class="stat">
+      <div class="stat-label">Unselected</div>
+      <div class="stat-val" style="color:${unselected>0?'#92400e':'var(--text)'}">${unselected}</div>
+      <div class="stat-sub">${rows.length} total items</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Selected</div>
+      <div class="stat-val" style="color:#174ea6">${selected}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Ordered</div>
+      <div class="stat-val" style="color:#137333">${ordered}</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Installed</div>
+      <div class="stat-val" style="color:#006064">${installed}</div>
+    </div>`;
+
+  const statsRow = document.getElementById('stats-row');
+  if(statsRow){
+    statsRow.innerHTML = statsHtml;
+    statsRow.style.gridTemplateColumns = 'repeat(4,minmax(0,1fr))';
+  }
+}
+
+/* ============================================================
+   TABLE RENDERING
+   ============================================================ */
+function groupRows(rows){
+  if(currentSchedule==='__all__'){
+    // Group first by schedule, then by unit within each schedule
+    const out=[];
+    SCHEDULES.forEach(sched=>{
+      const schedRows=rows.filter(r=>r.schedule===sched);
+      if(!schedRows.length)return;
+      out.push({_schedule:sched});
+      // within schedule, group by unit
+      const units={};
+      schedRows.forEach(r=>{const g=(r.location||'Other').split('-')[0].trim()||'Other';if(!units[g])units[g]=[];units[g].push(r);});
+      Object.keys(units).sort((a,b)=>{
+        const aM=a.match(/^Unit\s+(\d+)$/i),bM=b.match(/^Unit\s+(\d+)$/i);
+        if(aM&&bM)return Number(aM[1])-Number(bM[1]);
+        if(a.toLowerCase()==='main')return-1;if(b.toLowerCase()==='main')return 1;
+        return a.localeCompare(b);
+      }).forEach(g=>{
+        out.push({_group:g});
+        const sorted=units[g].slice().sort((a,b)=>(a.itemId||'').localeCompare(b.itemId||'',undefined,{numeric:true,sensitivity:'base'}));
+        sorted.forEach(r=>out.push(r));
+      });
+    });
+    return out;
+  }
+  const groups={};
+  rows.forEach(r=>{const g=(r.location||'Other').split('-')[0].trim()||'Other';if(!groups[g])groups[g]=[];groups[g].push(r);});
+  const out=[];
+  Object.keys(groups).sort((a,b)=>{
+    const aM=a.match(/^Unit\s+(\d+)$/i),bM=b.match(/^Unit\s+(\d+)$/i);
+    if(aM&&bM)return Number(aM[1])-Number(bM[1]);
+    if(a.toLowerCase()==='main')return-1;if(b.toLowerCase()==='main')return 1;
+    return a.localeCompare(b);
+  }).forEach(g=>{
+    out.push({_group:g});
+    const sorted=groups[g].slice().sort((a,b)=>(a.itemId||'').localeCompare(b.itemId||'',undefined,{numeric:true,sensitivity:'base'}));
+    sorted.forEach(r=>out.push(r));
+    const sub=groups[g].filter(r=>r.status!=='Unselected').reduce((s,r)=>s+(r.qty||0)*(r.price||0),0);
+    out.push({_sub:g,_total:sub});
+  });
+  return out;
+}
+
+
+/* ============================================================
+   MOBILE COLUMN SETS — per schedule
+   On mobile each schedule shows only its most relevant columns.
+   ============================================================ */
+const MOBILE_COLS = {
+  'Accessories':              ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Appliance':                ['itemId','location','item','invoiceNum','supplier','specDoc','status'],
+  'Door and Trim':            ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Electrical and Low Voltage':['itemId','location','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Flooring':                 ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Hardware':                 ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Lighting':                 ['itemId','location','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Other':                    ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Paint':                    ['itemId','location','item','invoiceNum','supplier','specDoc','status'],
+  'Plumbing':                 ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Stone':                    ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  'Tile':                     ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+  '__all__':                  ['itemId','item','qty','invoiceNum','supplier','specDoc','status'],
+};
+
+function getMobileCols(sched){
+  return MOBILE_COLS[sched] || ['itemId','item','qty','status'];
+}
+
+function renderTable(){
+  const statusF=document.getElementById('filter-status').value;
+  const searchF=(document.getElementById('filter-search').value||'').toLowerCase();
+  const showUnsel=document.getElementById('show-unsel').checked;
+  const isAdmin = ACCESS_MODE==='admin';
+  const showBudget=isAdmin&&document.getElementById('show-budget')&&document.getElementById('show-budget').checked;
+  const cfg=getConfig();
+  const hidePricing = (ACCESS_MODE==='trade') || cfg.hidePricing;
+
+  let rows=getRows().filter(r=>{
+    if(!showUnsel&&r.status==='Unselected')return false;
+    if(statusF&&r.status!==statusF)return false;
+    if(searchF){
+      const hay=[r.item,r.description,r.itemId,r.designerItemId,r.location,r.supplier,r.invoiceNum].join(' ').toLowerCase();
+      if(!hay.includes(searchF))return false;
+    }
+    return true;
+  });
+
+  calcStats(getRows());
+  buildRespHeader();
+
+  const grouped=groupRows(rows);
+  const grandTotal=rows.filter(r=>r.status!=='Unselected').reduce((s,r)=>s+(r.qty||0)*(r.price||0),0);
+
+  // Build columns dynamically
+  const cols=[];
+  // Checkbox col for admin/supervisor bulk select
+  if(['admin','supervisor'].includes(ACCESS_MODE)){
+    cols.push({key:'_chk',label:'<input type="checkbox" id="chk-all" style="accent-color:#fff;cursor:pointer" onchange="toggleAllRows(this.checked)">',w:'32px',align:'center'});
+  }
+  cols.push(...[
+    {key:'itemId',label:'Item ID',w:'80px'},
+    {key:'location',label:'Location',w:'110px'},
+    {key:'item',label:'Item',w:'110px'},
+    {key:'description',label:'Description',w:'200px'},
+  ]);
+  if(!hidePricing){
+    cols.push({key:'qty',label:'Qty',w:'42px',align:'center'});
+    cols.push({key:'price',label:'Price',w:'72px',align:'right'});
+    cols.push({key:'total',label:'Total',w:'78px',align:'right'});
+    if(showBudget&&!hidePricing){
+      cols.push({key:'budget',label:'Budget',w:'72px',align:'right'});
+      cols.push({key:'variance',label:'Var',w:'68px',align:'right'});
+    }
+  }
+  // showDesignerId: admin controls the toggle, but it shows for ALL roles when on
+  const showDesignerId=document.getElementById('show-designer-id')&&document.getElementById('show-designer-id').checked;
+  if(showDesignerId)cols.splice(1,0,{key:'designerItemId',label:'Designer ID',w:'80px'});
+  cols.push({key:'invoiceNum',label:'Invoice #',w:'120px'});
+  cols.push({key:'specDoc',label:'Spec',w:'40px',align:'center'});
+  cols.push({key:'supplier',label:'Supplier',w:'110px'});
+  cols.push({key:'status',label:'Status',w:'88px'});
+  // Per-line responsibility columns (always visible, after status)
+  RESP_COLS.forEach(rc=>{
+    cols.push({key:rc.key, label:rc.label, w:'76px'});
+  });
+  cols.push({key:'_edit',label:'',w:'42px'});
+
+  // ── Apply user hidden columns ──
+  if(hiddenCols.size>0){
+    const keep=cols.filter(c=>!hiddenCols.has(c.key)||c.key==='_edit');
+    cols.length=0; keep.forEach(c=>cols.push(c));
+  }
+
+  // ── MOBILE: tighten column widths ──
+  if(isMobile()){
+    const MOB_WIDTHS={itemId:'64px',designerItemId:'64px',location:'90px',item:'100px',
+      description:'130px',qty:'36px',price:'62px',total:'62px',invoiceNum:'90px',
+      specDoc:'32px',supplier:'80px',status:'74px',_edit:'38px',budget:'62px',variance:'56px'};
+    cols.forEach(c=>{if(MOB_WIDTHS[c.key])c.w=MOB_WIDTHS[c.key];});
+  }
+
+  // ── MOBILE: filter to schedule-specific column set ──
+  if(isMobile()&&!isAdmin){
+    const mobileCols=getMobileCols(currentSchedule);
+    // Always keep status and _edit
+    const mobileKeys=new Set([...mobileCols,'status','_edit']);
+    // On all-view, also keep schedule header cols
+    const filtered=cols.filter(c=>mobileKeys.has(c.key));
+    // For description: keep it but truncated (handled by .mob-desc-cell class)
+    if(mobileCols.includes('description')&&!filtered.find(c=>c.key==='description')){
+      const descIdx=filtered.findIndex(c=>c.key==='item');
+      if(descIdx>=0)filtered.splice(descIdx+1,0,{key:'description',label:'Description',w:'140px'});
+    }
+    cols.length=0;
+    filtered.forEach(c=>cols.push(c));
+  }
+
+  document.getElementById('tbl-head').innerHTML=`<tr>${cols.map(c=>`<th style="width:${c.w};${c.align?'text-align:'+c.align:''}">${c.label}</th>`).join('')}</tr>`;
+
+  const paintNotice=cfg.note?`<tr><td colspan="${cols.length}" style="padding:8px 10px"><div class="paint-notice">${cfg.note}</div></td></tr>`:'';
+
+  const bodyRows=grouped.map(r=>{
+    if(r._schedule)return`<tr class="schedule-header-row"><td colspan="${cols.length}">${r._schedule}</td></tr>`;
+    if(r._group)return`<tr class="group-row"><td colspan="${cols.length}">${r._group.toUpperCase()}</td></tr>`;
+    if(r._sub){
+      const cells=cols.map((c,i)=>{
+        if(c.key==='total')return`<td class="sub-val">${hidePricing?'':fmt(r._total)}</td>`;
+        if(i===cols.length-2)return`<td class="sub-label" colspan="2">Unit total</td>`;
+        if(i===cols.length-1)return'';
+        return`<td></td>`;
+      });
+      return`<tr class="subtotal-row">${cells.join('')}</tr>`;
+    }
+
+    const isUnsel=r.status==='Unselected';
+    const tot=(r.qty||0)*(r.price||0);
+    const bgt=(r.qty||0)*(r.budgetPrice||0);
+    const varAmt=tot-bgt;
+    const idx=projects[currentProject].findIndex(x=>x.id===r.id);
+
+    const cells=cols.map(c=>{
+      switch(c.key){
+        case'itemId':return`<td><span class="item-id">${r.itemId||'—'}</span></td>`;
+        case'designerItemId':return`<td><span class="designer-id">${r.designerItemId||'—'}</span></td>`;
+        case'location':return`<td>${r.location||'—'}</td>`;
+        case'item':return`<td>${isUnsel?`<span class="unsel-label">${r.item||'—'}</span>`:r.item||'—'}</td>`;
+        case'description':{
+          const desc = r.description||'';
+          const fields = SCHEDULE_DESC_FIELDS[r.schedule];
+          if(!desc) return`<td style="color:#f59e0b;font-style:italic;font-size:11px">Not yet selected</td>`;
+          if(fields){
+            const vals = parseStructuredDesc(desc, fields);
+            // Primary field (first non-empty) as the main label
+            const primary = fields.find(f=>vals[f.key]);
+            const primaryHtml = primary
+              ? `<div style="font-size:11.5px;font-weight:500;color:var(--text);line-height:1.3">${vals[primary.key]}</div>`
+              : '<div style="color:var(--text-muted);font-size:11px">—</div>';
+            // Secondary: next 2 non-empty fields as small chips
+            const secondaryFields = fields.filter(f=>f!==primary&&vals[f.key]).slice(0,2);
+            const chips = secondaryFields.map(f=>
+              `<span style="font-size:10px;color:var(--text-muted)">${vals[f.key]}</span>`
+            ).join('<span style="color:var(--border-med);margin:0 3px">·</span>');
+            // Expand panel: all fields in a clean key-value card
+            const expandRows = fields.filter(f=>vals[f.key]).map(f=>
+              `<div style="display:grid;grid-template-columns:120px 1fr;gap:6px;padding:4px 0;border-bottom:0.5px solid var(--border)">
+                <span style="font-size:10.5px;color:var(--text-muted);font-weight:500">${f.label}</span>
+                <span style="font-size:11px;color:var(--text)">${vals[f.key]}</span>
+              </div>`
+            ).join('');
+            return`<td style="min-width:180px;max-width:280px">
+              ${primaryHtml}
+              ${chips?`<div style="margin-top:2px">${chips}</div>`:''}
+              <button onclick="toggleDescExpand(${r.id},event)" style="font-size:10px;color:var(--slate);background:none;border:none;cursor:pointer;padding:3px 0 0;text-decoration:none;display:flex;align-items:center;gap:3px;opacity:0.7">
+                <span id="desc-arrow-${r.id}" style="font-size:9px">▼</span> details
+              </button>
+              <div id="desc-expand-${r.id}" style="display:none;margin-top:6px;padding:8px 10px;background:#f8fafc;border-radius:6px;border:0.5px solid var(--border);box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+                ${expandRows}
+              </div>
+            </td>`;
+          }
+          // Plain text fallback
+          const short = desc.length>70?desc.substring(0,70)+'…':desc;
+          return`<td style="min-width:160px;max-width:280px">
+            <div style="font-size:11.5px;color:var(--text-med);line-height:1.4">${short}</div>
+            ${desc.length>70?`
+            <button onclick="toggleDescExpand(${r.id},event)" style="font-size:10px;color:var(--slate);background:none;border:none;cursor:pointer;padding:3px 0 0;display:flex;align-items:center;gap:3px;opacity:0.7">
+              <span id="desc-arrow-${r.id}" style="font-size:9px">▼</span> show more
+            </button>
+            <div id="desc-expand-${r.id}" style="display:none;margin-top:4px;padding:8px 10px;background:#f8fafc;border-radius:6px;border:0.5px solid var(--border);font-size:11px;color:var(--text-med);line-height:1.5;white-space:pre-wrap">${desc}</div>`:''}
+          </td>`;
+        }
+        case'qty':return`<td style="text-align:center">${fmtNum(r.qty)}</td>`;
+        case'price':return`<td style="text-align:right">${r.price?fmt(r.price):'—'}</td>`;
+        case'total':return`<td style="text-align:right">${tot>0?fmt(tot):'—'}</td>`;
+        case'budget':return`<td style="text-align:right">${bgt>0?fmt(bgt):'—'}</td>`;
+        case'variance':{const vc=varAmt>0?'var-neg':'var-pos';return`<td style="text-align:right" class="${tot>0&&bgt>0?vc:''}">${tot>0&&bgt>0?fmt(Math.abs(varAmt)):''}</td>`;}
+        case'invoiceNum':{
+          const invs=getInvoices(r);
+          if(!invs.length)return`<td style="font-size:11px;color:var(--text-muted)">—</td>`;
+          return`<td><div class="inv-chips">${invs.map((inv,i)=>{
+            const chipClass=i>0?'inv-chip inv-chip-reorder':'inv-chip';
+            const prefix=i>0?'<span style="font-size:9px;color:#92400e;font-weight:600">RE&#8209;ORDER&nbsp;</span>':'';
+            const label=inv.num||(inv.url?'View':'—');
+            const href = inv.pdf||inv.url||'';
+            return href
+              ?`<span class="${chipClass}">${prefix}<a href="${href}" target="_blank" title="${inv.fileName||inv.url||'Invoice'}">${label}</a></span>`
+              :`<span class="${chipClass}">${prefix}${label}</span>`;
+          }).join('')}</div></td>`;
+        }
+        case'invoiceDoc':{
+          const invs=getInvoices(r);
+          const withUrl=invs.filter(inv=>inv.url);
+          if(!withUrl.length)return`<td style="text-align:center"><span class="doc-link empty" title="No invoice">—</span></td>`;
+          return`<td style="text-align:center"><div style="display:flex;flex-direction:column;gap:2px;align-items:center">${withUrl.map((inv,i)=>`<a class="doc-link" style="${i>0?'background:#fef3c7;border-color:#fcd34d;color:#92400e':''}" href="${inv.url}" target="_blank" title="${i>0?'Re-order: ':''}${inv.num||'Open invoice'}">&#128196;</a>`).join('')}</div></td>`;
+        }
+        case'specDoc':{
+          const specHref = r.specPdf||r.specUrl||'';
+          if(specHref)return`<td style="text-align:center"><a class="doc-link" href="${specHref}" target="_blank" title="Open spec sheet">&#128209;</a></td>`;
+          return`<td style="text-align:center"><span class="doc-link empty" title="No spec sheet">—</span></td>`;
+        }
+        case'supplier':{
+          const sup=r.supplier||'';
+          if(sup&&SUPPLIER_DB[sup])return`<td><span class="supplier-link" onclick="showSupplier('${sup}',event)">${sup}</span></td>`;
+          return`<td style="font-size:11.5px">${sup||'—'}</td>`;
+        }
+        case'status':return`<td><span class="badge s-${r.status||'Unselected'}">${r.status||'Unselected'}</span></td>`;
+        case'respSelection':
+        case'respApproval':
+        case'respPurchasing':{
+          const rc = RESP_COLS.find(rc2=>rc2.key===c.key);
+          if(!rc) return'<td>—</td>';
+          const val = r[c.key]||'';
+          const done = rc.doneAt.includes(r.status||'Unselected');
+          const bgColor = done ? '#f0fdf4' : (val ? '#f8fafc' : '#fff');
+          const textColor = done ? '#137333' : (val ? 'var(--text-med)' : '#d1d5db');
+          const icon = done ? '✓ ' : '';
+          const cellStyle = `background:${bgColor};text-align:center`;
+          if(!val) return `<td style="${cellStyle}"><span style="color:#d1d5db;font-size:10px">—</span></td>`;
+          return `<td style="${cellStyle}">
+            <span style="font-size:10.5px;color:${textColor};${done?'text-decoration:none;font-weight:500':''}">
+              ${icon}${val}
+            </span>
+          </td>`;
+        }
+        case'_chk':return`<td style="text-align:center;padding:4px"><input type="checkbox" class="row-checkbox" data-id="${r.id}" onchange="toggleRowSelect(${r.id},this.checked)"></td>`;
+        case'_edit':return`<td style="text-align:center"><button class="mob-edit-btn" onclick="openEditEntry(${idx})"" style="background:none;border:0.5px solid var(--border-med);color:var(--text-muted);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer">Edit</button></td>`;
+        default:return`<td></td>`;
+      }
+    });
+
+    return`<tr class="${isUnsel?'unselected-row':''}">${cells.join('')}</tr>`;
+  }).join('');
+
+  const grandRow=(!hidePricing&&currentSchedule!=='__all__'&&rows.filter(r=>r.status!=='Unselected').length>0)?`<tr class="grand-row">
+    <td colspan="${cols.findIndex(c=>c.key==='total')}" style="text-align:right;padding:7px 8px;font-weight:500;color:var(--text-muted)">Grand total</td>
+    <td style="text-align:right;padding:7px 8px">${fmt(grandTotal)}</td>
+    <td colspan="${cols.length-cols.findIndex(c=>c.key==='total')-1}"></td>
+  </tr>`:'';
+
+  document.getElementById('tbl-body').innerHTML=paintNotice+bodyRows+grandRow;
+}
+
+
+/* ============================================================
+   MULTI-INVOICE HELPERS
+   ============================================================ */
+function migrateInvoice(r){
+  // Migrate legacy single invoiceNum/invoiceUrl to invoices array
+  if(r.invoices) return r.invoices;
+  const invs=[];
+  if(r.invoiceNum||r.invoiceUrl) invs.push({num:r.invoiceNum||'',url:r.invoiceUrl||''});
+  return invs;
+}
+
+function getInvoices(r){
+  if(r.invoices&&r.invoices.length) return r.invoices;
+  const invs=[];
+  if(r.invoiceNum||r.invoiceUrl) invs.push({num:r.invoiceNum||'',url:r.invoiceUrl||''});
+  return invs;
+}
+
+function buildInvoiceRows(invoices){
+  const rows=invoices.length?invoices:[{num:'',url:''}];
+  return rows.map((inv,i)=>`
+    <div class="inv-form-row" id="inv-row-${i}">
+      <div class="field" style="margin:0">
+        <label style="font-size:10.5px">${i===0?'Invoice #':'Re-order invoice #'}</label>
+        <input type="text" class="inv-num" value="${inv.num||''}" placeholder="INV-2024-001" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border-med);border-radius:6px">
+      </div>
+      <div class="field" style="margin:0">
+        <label style="font-size:10.5px">${i===0?'Invoice URL':'Re-order invoice URL'}</label>
+        <input type="text" class="inv-url" value="${inv.url||''}" placeholder="https://drive.google.com/..." style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border-med);border-radius:6px">
+      </div>
+      ${i>0?`<button type="button" class="inv-remove" onclick="removeInvoiceRow(${i})">Remove</button>`:`<div></div>`}
+    </div>`).join('');
+}
+
+function addInvoiceRow(){
+  const container=document.getElementById('inv-rows-container');
+  if(!container)return;
+  const existing=container.querySelectorAll('.inv-form-row').length;
+  const div=document.createElement('div');
+  div.className='inv-form-row';
+  div.id=`inv-row-${existing}`;
+  div.innerHTML=`
+    <div class="field" style="margin:0">
+      <label style="font-size:10.5px">Re-order invoice #</label>
+      <input type="text" class="inv-num" placeholder="INV-2024-002" style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border-med);border-radius:6px">
+    </div>
+    <div class="field" style="margin:0">
+      <label style="font-size:10.5px">Re-order invoice URL</label>
+      <input type="text" class="inv-url" placeholder="https://drive.google.com/..." style="font-size:12px;padding:5px 8px;border:0.5px solid var(--border-med);border-radius:6px">
+    </div>
+    <button type="button" class="inv-remove" onclick="this.closest('.inv-form-row').remove()">Remove</button>`;
+  container.appendChild(div);
+}
+
+function removeInvoiceRow(i){
+  const row=document.getElementById(`inv-row-${i}`);
+  if(row)row.remove();
+}
+
+function readInvoiceRows(){
+  const container=document.getElementById('inv-rows-container');
+  if(!container)return[];
+  const rows=container.querySelectorAll('.inv-form-row');
+  const result=[];
+  rows.forEach(row=>{
+    const num=(row.querySelector('.inv-num')?.value||'').trim();
+    const url=(row.querySelector('.inv-url')?.value||'').trim();
+    if(num||url)result.push({num,url});
+  });
+  return result;
+}
+
+function switchSchedule(s){currentSchedule=s;buildNav();renderTable();}
+
+/* ============================================================
+   PROJECT SWITCHING
+   ============================================================ */
+function switchProject(v){
+  if(v==='__new__'){
+    const name=prompt('New project name:');
+    if(name&&name.trim()){
+      const t=name.trim();
+      projects[t]=[];currentProject=t;
+      const sel=document.getElementById('proj-select');
+      const opt=document.createElement('option');opt.value=t;opt.text=t;
+      sel.insertBefore(opt,sel.options[sel.options.length-1]);sel.value=t;
+    }else{document.getElementById('proj-select').value=currentProject;return;}
+  }else{currentProject=v;}
+  document.getElementById('proj-title').textContent=currentProject;
+  currentSchedule='Accessories';buildNav();renderTable();
+}
+
+/* ============================================================
+   T1: IMPORT
+   ============================================================ */
+document.getElementById('import-project-target').addEventListener('change',function(){
+  document.getElementById('import-new-proj-name').style.display=this.value==='__new__'?'block':'none';
+});
+
+function previewImport(){
+  const csv=document.getElementById('import-csv').value.trim();
+  if(!csv){alert('Paste CSV data first.');return;}
+  const lines=csv.split('\n').map(l=>l.trim()).filter(Boolean);
+  const parsed=lines.map(l=>{const p=l.split(',').map(x=>x.trim());return{schedule:p[0]||'Other',location:p[1]||'',item:p[2]||'',qty:Number(p[3])||1};});
+  const prev=document.getElementById('import-preview');
+  prev.innerHTML=`<p style="font-size:11.5px;color:var(--text-muted);margin-bottom:6px">Preview (${parsed.length} entries):</p>`+
+    `<div style="max-height:150px;overflow-y:auto;border:0.5px solid var(--border);border-radius:6px">
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+    <tr style="background:var(--slate-xlight)"><th style="padding:5px 8px;text-align:left">Schedule</th><th style="padding:5px 8px;text-align:left">Location</th><th style="padding:5px 8px;text-align:left">Item</th><th style="padding:5px 8px;text-align:right">Qty</th></tr>
+    ${parsed.map(p=>`<tr style="border-bottom:0.5px solid var(--border)"><td style="padding:5px 8px">${p.schedule}</td><td style="padding:5px 8px">${p.location}</td><td style="padding:5px 8px">${p.item}</td><td style="padding:5px 8px;text-align:right">${p.qty}</td></tr>`).join('')}
+    </table></div>`;
+}
+
+function doImport(){
+  const csv=document.getElementById('import-csv').value.trim();
+  if(!csv){alert('Paste CSV data first.');return;}
+  const sel=document.getElementById('import-project-target').value;
+  let targetProject=currentProject;
+  if(sel==='__new__'){
+    const name=document.getElementById('import-new-proj-name').value.trim();
+    if(!name){alert('Enter a project name.');return;}
+    projects[name]=[];targetProject=name;
+    // Generate role tokens for the new project
+    const _prefix=name.replace(/[^a-z0-9]/gi,'').substring(0,4).toLowerCase()||'proj';
+    const _rand=()=>Math.random().toString(36).substring(2,6);
+    ['trade','client','supervisor','admin'].forEach(role=>{
+      const tok=_prefix+'-'+role.substring(0,3)+'-'+_rand();
+      ROLE_TOKENS[tok]={project:name,role};
+    });
+    const psel=document.getElementById('proj-select');
+    const opt=document.createElement('option');opt.value=name;opt.text=name;
+    psel.insertBefore(opt,psel.options[psel.options.length-1]);
+    currentProject=name;psel.value=name;
+    document.getElementById('proj-title').textContent=name;
+  }
+  const lines=csv.split('\n').map(l=>l.trim()).filter(Boolean);
+  // Build existing itemIds to avoid collision
+  const existingIds=new Set((projects[targetProject]||[]).map(r=>r.itemId).filter(Boolean));
+  const schedCounts={};
+  const newEntries=[];
+  lines.forEach(l=>{
+    const p=l.split(',').map(x=>x.trim());
+    const sched=p[0]||'Other';
+    const loc=p[1]||'';const item=p[2]||'';const qty=Number(p[3])||1;
+    const prefix=sched.substring(0,3).toUpperCase().replace(/\s/g,'');
+    // Find next available ID
+    let base=`${prefix}-${(loc.match(/\d+/)||['1'])[0]}`;
+    let suffix=1;
+    while(existingIds.has(`${base}.${suffix}`))suffix++;
+    const itemId=`${base}.${suffix}`;
+    existingIds.add(itemId);
+    newEntries.push({id:nextId++,schedule:sched,itemId,designerItemId:'',location:loc,item,description:'',qty,price:0,budgetPrice:0,supplier:'',invoices:[],specUrl:'',notes:'',status:'Unselected'});
+  });
+  projects[targetProject]=[...(projects[targetProject]||[]),...newEntries];
+  hideModal('import-modal');
+  document.getElementById('import-csv').value='';
+  document.getElementById('import-preview').innerHTML='';
+  buildNav();renderTable();
+  alert(`Imported ${newEntries.length} entries as Unselected.`);
+}
+
+/* ============================================================
+   T10: ADD / EDIT ENTRY
+   ============================================================ */
+function buildEntryForm(r){
+  const cfg=getConfig();
+  const allScheduleRows=allRows();
+  const existingItemIds=[...new Set(allScheduleRows.map(x=>x.itemId).filter(Boolean))];
+  const existingLocations=[...new Set(allScheduleRows.map(x=>x.location).filter(Boolean))];
+  const existingItems=[...new Set(allScheduleRows.map(x=>x.item).filter(Boolean))];
+
+  const paintNote=cfg.note?'<div class="paint-notice" style="grid-column:1/-1">'+cfg.note+'</div>':'';
+
+  let extraFields='';
+  if(cfg.extraFields&&cfg.extraFields.length>0){
+    extraFields='<div class="section-title full" style="grid-column:1/-1">Schedule-specific details</div>'+
+      cfg.extraFields.map(function(f){return '<div class="field"><label>'+(EXTRA_FIELD_LABELS[f]||f)+'</label><input type="text" id="ef-'+f+'" value="'+(r[f]||'')+'"></div>';}).join('');
+  }
+
+  let priceFields='';
+  if(!cfg.hidePricing){
+    priceFields='<div class="field"><label>Unit price ($)</label><input type="number" id="f-price" step="0.01" value="'+(r.price||'')+'"></div>';
+    if(isAdmin){priceFields+='<div class="field"><label>Budget price ($) <span class="admin-pill">Admin</span></label><input type="number" id="f-budgetprice" step="0.01" value="'+(r.budgetPrice||'')+'"></div>';}
+  }
+
+  // Pre-compute invoice rows OUTSIDE template literal to avoid nested template conflicts
+  const invoiceRowsHtml=buildInvoiceRows(r.invoices||migrateInvoice(r));
+  const supplierOptions=Object.keys(SUPPLIER_DB).map(function(s){return '<option value="'+s+'">';}).join('');
+  const scheduleOptions=SCHEDULES.map(function(s){return '<option'+(s===(r.schedule||currentSchedule)?' selected':'')+'>'+s+'</option>';}).join('');
+  const statusOptions=STATUSES.map(function(s){return '<option'+(s===(r.status||'Unselected')?' selected':'')+'>'+s+'</option>';}).join('');
+  const itemIdOptions=existingItemIds.map(function(id){return '<option value="'+id+'">';}).join('');
+  const locationOptions=existingLocations.map(function(l){return '<option value="'+l+'">';}).join('');
+  const itemOptions=existingItems.map(function(i){return '<option value="'+i+'">';}).join('');
+
+  // Build form using string concatenation — avoids nested template literal issues
+  return '<div class="fg">'
+    +paintNote
+    +'<div class="field"><label>Schedule</label><select id="f-schedule" onchange="onScheduleChange(this.value)">'+scheduleOptions+'</select></div>'
+    +'<div class="field"><label>Status</label><select id="f-status">'+statusOptions+'</select></div>'
+    +'<div class="section-title" style="grid-column:1/-1">Responsibility</div>'
+    +RESP_COLS.map(rc=>{
+      const val=r[rc.key]||'';
+      const opts=RESP_PEOPLE.map(p=>{
+        const sel = p===val ? ' selected' : '';
+        const label = p==='' ? '— unassigned —' : p;
+        return '<option value="'+p+'"'+sel+'>'+label+'</option>';
+      }).join('');
+      return '<div class="field"><label>'+rc.label+'</label><select id="f-'+rc.key+'">'+opts+'</select></div>';
+    }).join('')
+    +'<div class="section-title" style="grid-column:1/-1">Item identification</div>'
+    +'<div class="field"><label>Item ID</label><input type="text" id="f-itemid" list="itemid-list" value="'+(r.itemId||'')+'" oninput="onItemIdChange(this.value)" placeholder="e.g. ACC-1.1"><datalist id="itemid-list">'+itemIdOptions+'</datalist></div>'
+    +'<div class="field"><label>Designer Item ID</label><input type="text" id="f-designerid" value="'+(r.designerItemId||'')+'" placeholder="e.g. MIR-1-1-1"></div>'
+    +'<div class="field"><label>Location</label><input type="text" id="f-location" list="loc-list" value="'+(r.location||'')+'" placeholder="e.g. Unit 1-Bathroom"><datalist id="loc-list">'+locationOptions+'</datalist></div>'
+    +'<div class="field"><label>Item name</label><input type="text" id="f-item" list="item-list" value="'+(r.item||'')+'" placeholder="e.g. Mirror"><datalist id="item-list">'+itemOptions+'</datalist></div>'
+    +'<div class="section-title" style="grid-column:1/-1">Specification &amp; pricing</div>'
+    +buildDescFields(r.schedule||currentSchedule, r.description||'')
+    +'<div class="field"><label>Quantity</label><input type="number" id="f-qty" step="0.01" value="'+(r.qty||'')+'"></div>'
+    +priceFields
+    +'<div class="section-title" style="grid-column:1/-1">Documents &amp; supply</div>'
+    +'<div class="field"><label>Supplier</label><input type="text" id="f-supplier" list="sup-list" value="'+(r.supplier||'')+'"><datalist id="sup-list">'+supplierOptions+'</datalist></div>'
+    +'<div class="field"><label>Spec sheet URL</label><input type="text" id="f-specurl" value="'+(r.specUrl||'')+'" placeholder="https://drive.google.com/..."></div>'
+    +'<div class="field full"><label>Invoices <span style="font-size:10px;color:var(--text-muted)">(add one per row — supports reorders)</span></label>'
+    +'<div id="inv-rows-container">'+invoiceRowsHtml+'</div>'
+    +'<button type="button" onclick="addInvoiceRow()" style="margin-top:6px;font-size:11px;padding:4px 10px;border-radius:4px;border:0.5px solid var(--border-med);background:#f8fafc;cursor:pointer;color:var(--text-med)">+ Add invoice</button></div>'
+    +'<div class="field full"><label>Notes</label><input type="text" id="f-notes" value="'+(r.notes||'')+'"></div>'
+    +extraFields
+    +'</div>';
+}
+
+function openAddEntry(){
+  editingId=null;
+  document.getElementById('entry-modal-title').textContent='Add entry';
+  document.getElementById('entry-delete-btn').style.display='none';
+  document.getElementById('entry-modal-body').innerHTML=buildEntryForm({schedule:currentSchedule,status:'Unselected',respSelection:'Client',respApproval:'Client',respPurchasing:'Client'});
+  showModal('entry-modal');
+}
+
+function openEditEntry(idx){
+  const r=projects[currentProject][idx];
+  editingId=r.id;
+  document.getElementById('entry-modal-title').textContent='Edit entry';
+  document.getElementById('entry-delete-btn').style.display='block';
+  document.getElementById('entry-modal-body').innerHTML=buildEntryForm(r);
+  showModal('entry-modal');
+}
+
+function onItemIdChange(val){
+  // T10: If existing item ID selected, lock location + item
+  const existing=allRows().find(r=>r.itemId===val&&(editingId===null||r.id!==editingId));
+  if(existing){
+    const locEl=document.getElementById('f-location');
+    const itemEl=document.getElementById('f-item');
+    if(locEl)locEl.value=existing.location;
+    if(itemEl)itemEl.value=existing.item;
+  }
+}
+
+function onScheduleChange(val){
+  const currentVals=readFormVals();
+  currentVals.schedule=val;
+  document.getElementById('entry-modal-body').innerHTML=buildEntryForm(currentVals);
+  // Refresh description hint and placeholder for new schedule
+  const hint=document.getElementById('desc-hint');
+  const ta=document.getElementById('f-desc');
+  const h=DESCRIPTION_HELP[val]||'';
+  if(hint)hint.textContent=h;
+  if(ta)ta.placeholder=h||'Manufacturer, product name, finish, size, SKU.';
+}
+
+function readFormVals(){
+  syncDescFields();
+  const g=id=>document.getElementById(id);
+  const cfg=SCHEDULE_CONFIG[g('f-schedule')?.value]||{};
+  const extra={};
+  if(cfg.extraFields)cfg.extraFields.forEach(f=>{const el=document.getElementById('ef-'+f);if(el)extra[f]=el.value;});
+  return{
+    schedule:g('f-schedule')?.value||currentSchedule,
+    itemId:g('f-itemid')?.value?.trim()||'',
+    designerItemId:g('f-designerid')?.value?.trim()||'',
+    location:g('f-location')?.value?.trim()||'',
+    item:g('f-item')?.value?.trim()||'',
+    description:g('f-desc')?.value?.trim()||'',
+    qty:parseFloat(g('f-qty')?.value)||0,
+    price:parseFloat(g('f-price')?.value)||0,
+    budgetPrice:parseFloat(g('f-budgetprice')?.value)||0,
+    supplier:g('f-supplier')?.value?.trim()||'',
+    invoices:readInvoiceRows(),
+    specUrl:g('f-specurl')?.value?.trim()||'',
+    notes:g('f-notes')?.value?.trim()||'',
+    status:g('f-status')?.value||'Unselected',
+    ...Object.fromEntries(RESP_COLS.map(rc=>[rc.key, (g('f-'+rc.key)?.value||'').replace('— unassigned —','')])),
+    ...extra
+  };
+}
+
+function saveEntry(){
+  const vals=readFormVals();
+  // T10: unique item ID check
+  if(vals.itemId){
+    const dup=allRows().find(r=>r.itemId===vals.itemId&&r.id!==editingId);
+    if(dup&&(dup.location!==vals.location||dup.item!==vals.item)){
+      if(!confirm(`Item ID "${vals.itemId}" exists for "${dup.location} — ${dup.item}". Save anyway with new location/item?`))return;
+    }
+  }
+  if(editingId!==null){
+    const idx=projects[currentProject].findIndex(r=>r.id===editingId);
+    if(idx>=0)projects[currentProject][idx]={...projects[currentProject][idx],...vals,invoices:vals.invoices||[],id:editingId};
+  }else{
+    const entry={...vals,id:nextId++};
+    if(!projects[currentProject])projects[currentProject]=[];
+    projects[currentProject].push(entry);
+  }
+  const newSched=vals.schedule;
+  hideModal('entry-modal');
+  if(newSched!==currentSchedule){currentSchedule=newSched;buildNav();}
+  buildNav();renderTable();
+}
+
+function deleteEntry(){
+  if(!confirm('Delete this entry?'))return;
+  projects[currentProject]=projects[currentProject].filter(r=>r.id!==editingId);
+  // Clean up blobs for deleted entry
+  const deletedId = editingId;
+  deleteFileBlob('spec_'+deletedId).catch(()=>{});
+  for(let i=0;i<20;i++) deleteFileBlob('inv_'+deletedId+'_'+i).catch(()=>{});
+  saveProjects();hideModal('entry-modal');buildNav();renderTable();
+}
+
+/* ============================================================
+   T3: EXPORT PDF
+   ============================================================ */
+function showExportModal(){
+  const list=document.getElementById('export-schedule-list');
+  list.innerHTML=SCHEDULES.map(s=>{
+    const rows=(projects[currentProject]||[]).filter(r=>r.schedule===s);
+    const changed=exportHistory[currentProject]&&exportHistory[currentProject][s]?'':'(never exported)';
+    return`<div class="export-opt">
+      <input type="checkbox" id="exp-${s}" name="exp-sched" value="${s}" checked>
+      <label for="exp-${s}">${s} <span style="color:var(--text-muted)">(${rows.length} items) ${changed}</span></label>
+    </div>`;
+  }).join('');
+  showModal('export-modal');
+}
+
+function selectAllExport(){
+  document.querySelectorAll('input[name="exp-sched"]').forEach(el=>el.checked=true);
+}
+
+function doExport(){
+  const allInOne = document.getElementById('export-all-in-one')?.checked;
+  const selected = allInOne
+    ? SCHEDULES.filter(sc=>(projects[currentProject]||[]).some(r=>r.schedule===sc))
+    : [...document.querySelectorAll('input[name="exp-sched"]:checked')].map(el=>el.value);
+  if(!selected.length){alert('Select at least one schedule.');return;}
+
+  const {jsPDF}=window.jspdf;
+  const STATUS_COLORS={
+    'Unselected': {fill:[255,248,225], text:[146,64,14]},
+    'Approved':   {fill:[232,240,254], text:[23,78,166]},
+    'Ordered':    {fill:[230,244,234], text:[19,115,51]},
+    'Installed':  {fill:[224,247,250], text:[0,96,100]},
+    'Delivered':  {fill:[217,242,227], text:[11,128,67]},
+  };
+
+  function buildSchedulePDF(doc, sched, isFirst){
+    if(!projects[currentProject])return;
+    const rows=(projects[currentProject]||[]).filter(r=>r.schedule===sched);
+    if(!rows.length)return;
+
+    const pw=doc.internal.pageSize.getWidth();
+    const ph=doc.internal.pageSize.getHeight();
+    let y=15;
+
+    // Header bar
+    doc.setFillColor(95,111,130);
+    doc.rect(0,0,pw,22,'F');
+    doc.setTextColor(255,255,255);
+    doc.setFontSize(13);doc.setFont(undefined,'bold');
+    doc.text(currentProject,14,10);
+    doc.setFontSize(9);doc.setFont(undefined,'normal');
+    doc.text('Material Schedule \u2014 '+sched,14,17);
+    doc.text('Issued '+new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'}),pw-14,17,{align:'right'});
+    y=30;
+
+    // Column config — description gets most space, no truncation
+    const hidePricing = ACCESS_MODE==='trade';
+    const headers = hidePricing
+      ? ['Item ID','Location','Item','Description','Qty','Supplier','Status']
+      : ['Item ID','Location','Item','Description','Qty','Price','Total','Supplier','Status'];
+    const colWidths = hidePricing
+      ? [22,32,30,95,12,38,22]
+      : [22,30,28,75,12,20,22,30,22];
+
+    // Table header row
+    let x=14;
+    doc.setFillColor(95,111,130);
+    doc.rect(14,y-5,pw-28,9,'F');
+    doc.setTextColor(255,255,255);doc.setFontSize(7.5);doc.setFont(undefined,'bold');
+    headers.forEach((h,i)=>{doc.text(h,x+1.5,y);x+=colWidths[i];});
+    y+=6;
+
+    const grouped=groupRows(rows);
+    let stripe=false;
+
+    grouped.forEach(r=>{
+      // Group header (location)
+      if(r._group){
+        if(y>ph-20){doc.addPage();y=15;}
+        doc.setFillColor(183,196,211);
+        doc.rect(14,y-4,pw-28,7,'F');
+        doc.setTextColor(31,41,55);doc.setFontSize(7.5);doc.setFont(undefined,'bold');
+        doc.text(r._group.toUpperCase(),16,y);
+        y+=8;stripe=false;return;
+      }
+      // Subtotal row
+      if(r._sub){
+        if(y>ph-20){doc.addPage();y=15;}
+        doc.setFillColor(241,245,249);
+        doc.rect(14,y-4,pw-28,6,'F');
+        doc.setFont(undefined,'bold');doc.setFontSize(7);doc.setTextColor(55,65,81);
+        if(!hidePricing){
+          const subX=14+colWidths.slice(0,6).reduce((a,b)=>a+b,0);
+          doc.text('Unit total',subX-2,y,{align:'right'});
+          doc.text(fmt(r._total),subX+colWidths[6]-2,y,{align:'right'});
+        }
+        y+=7;stripe=false;return;
+      }
+
+      // Expand description — show ALL structured fields
+      const fields = SCHEDULE_DESC_FIELDS[r.schedule];
+      let descLines = [];
+      if(fields && r.description){
+        const vals = parseStructuredDesc(r.description, fields);
+        descLines = fields.filter(f=>vals[f.key]).map(f=>f.label+': '+vals[f.key]);
+      } else if(r.description){
+        descLines = [r.description];
+      } else {
+        descLines = ['Not yet selected'];
+      }
+
+      // Estimate row height based on description lines
+      const lineH = 4.2;
+      const rowH = Math.max(7, descLines.length * lineH + 3);
+
+      if(y+rowH>ph-20){doc.addPage();y=15;}
+
+      // Conditional row background
+      const sc = STATUS_COLORS[r.status];
+      if(sc){
+        doc.setFillColor(...sc.fill);
+        doc.rect(14,y-4,pw-28,rowH,'F');
+      } else if(stripe){
+        doc.setFillColor(248,250,252);
+        doc.rect(14,y-4,pw-28,rowH,'F');
+      }
+      stripe = !stripe;
+
+      // Write cells
+      doc.setFontSize(7.5);doc.setFont(undefined,'normal');
+      const tot=(r.qty||0)*(r.price||0);
+      const vals = hidePricing
+        ? [r.itemId||'',r.location||'',r.item||'','',String(r.qty||''),r.supplier||'',r.status||'']
+        : [r.itemId||'',r.location||'',r.item||'','',String(r.qty||''),r.price?fmt(r.price):'',tot>0?fmt(tot):'',r.supplier||'',r.status||''];
+
+      x=14;
+      vals.forEach((v,i)=>{
+        if(i===3) return; // skip desc — written separately below
+        doc.setTextColor(17,24,39);
+        // Status cell gets coloured text
+        if(headers[i]==='Status' && sc){
+          doc.setTextColor(...sc.text);doc.setFont(undefined,'bold');
+        }
+        const maxW = colWidths[i]-2;
+        const truncated = doc.splitTextToSize(String(v),maxW)[0]||'';
+        doc.text(truncated,x+1.5,y);
+        doc.setFont(undefined,'normal');doc.setTextColor(17,24,39);
+        x+=colWidths[i];
+      });
+
+      // Description column — all lines
+      const descColX = 14+colWidths.slice(0,3).reduce((a,b)=>a+b,0);
+      const descW = colWidths[3]-2;
+      doc.setTextColor(r.status==='Unselected'?146:55, r.status==='Unselected'?64:65, r.status==='Unselected'?14:81);
+      doc.setFont(undefined, r.status==='Unselected'?'italic':'normal');
+      descLines.forEach((line,li)=>{
+        const truncLine = doc.splitTextToSize(line, descW)[0]||'';
+        doc.text(truncLine, descColX+1.5, y+(li*lineH));
+      });
+      doc.setFont(undefined,'normal');doc.setTextColor(17,24,39);
+
+      y+=rowH;
+    });
+
+    // Grand total
+    if(!hidePricing){
+      const grand=rows.filter(r=>r.status!=='Unselected').reduce((s,r)=>s+(r.qty||0)*(r.price||0),0);
+      doc.setFillColor(232,237,242);
+      doc.rect(14,y-4,pw-28,8,'F');
+      doc.setFont(undefined,'bold');doc.setFontSize(8);doc.setTextColor(55,65,81);
+      const grandX=14+colWidths.slice(0,6).reduce((a,b)=>a+b,0);
+      doc.text('Grand total',grandX-2,y,{align:'right'});
+      doc.text(fmt(grand),grandX+colWidths[6]-2,y,{align:'right'});
+    }
+
+    if(!exportHistory[currentProject])exportHistory[currentProject]={};
+    exportHistory[currentProject][sched]=Date.now();
+  }
+
+  if(allInOne){
+    // All schedules in one PDF
+    const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
+    selected.forEach((sched,i)=>{
+      if(i>0) doc.addPage();
+      buildSchedulePDF(doc,sched,i===0);
+    });
+    doc.save(currentProject+' - All Schedules - '+new Date().toISOString().split('T')[0]+'.pdf');
+  } else {
+    selected.forEach(sched=>{
+      const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'letter'});
+      buildSchedulePDF(doc,sched,true);
+      doc.save(currentProject+' - '+sched+' - '+new Date().toISOString().split('T')[0]+'.pdf');
+    });
+  }
+
+  hideModal('export-modal');
+}
+
+
+/* ============================================================
+   T4: INVOICE — AI EXTRACTION + MATCHING
+   ============================================================ */
+
+let _invFileData = null;   // {base64, mediaType} for attached file
+let _invFileIsUrl = true;  // true = URL mode, false = file mode
+
+function switchInvTab(tab){
+  _invFileIsUrl = tab === 'url';
+  document.getElementById('inv-input-url').style.display  = _invFileIsUrl ? '' : 'none';
+  document.getElementById('inv-input-file').style.display = _invFileIsUrl ? 'none' : '';
+  document.getElementById('inv-tab-url').style.background  = _invFileIsUrl ? '#5f6f82' : '#f8fafc';
+  document.getElementById('inv-tab-url').style.color       = _invFileIsUrl ? '#fff' : 'var(--text-muted)';
+  document.getElementById('inv-tab-file').style.background = _invFileIsUrl ? '#f8fafc' : '#5f6f82';
+  document.getElementById('inv-tab-file').style.color      = _invFileIsUrl ? 'var(--text-muted)' : '#fff';
+}
+
+// Wire file drop zone
+document.addEventListener('DOMContentLoaded', function(){
+  const zone = document.getElementById('inv-drop-zone');
+  if(!zone) return;
+  zone.addEventListener('click', ()=>document.getElementById('inv-file-input').click());
+  zone.addEventListener('dragover', e=>{e.preventDefault();zone.style.borderColor='var(--slate)';});
+  zone.addEventListener('dragleave', ()=>zone.style.borderColor='');
+  zone.addEventListener('drop', e=>{
+    e.preventDefault(); zone.style.borderColor='';
+    const file = e.dataTransfer.files[0];
+    if(file) processInvFile(file);
+  });
+});
+
+function handleInvFile(input){
+  if(input.files[0]) processInvFile(input.files[0]);
+}
+
+function processInvFile(file){
+  const allowed = ['application/pdf','image/png','image/jpeg','image/webp'];
+  if(!allowed.includes(file.type)){alert('Please upload a PDF or image file.');return;}
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const dataUri = e.target.result; // full data URI including prefix
+    const b64 = dataUri.split(',')[1];
+    _invFileData = {base64: b64, mediaType: file.type, name: file.name, dataUri: dataUri};
+    const nameEl = document.getElementById('inv-file-name');
+    if(nameEl) nameEl.textContent = '✓ ' + file.name + ' (' + (file.size/1024).toFixed(0) + ' KB)';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function extractInvoice(){
+  if(!_anthropicKey){
+    showModal('apikey-modal');
+    const s=document.getElementById('apikey-status');
+    if(s){s.textContent='Enter your API key to use invoice extraction.';s.style.color='#b3261e';}
+    return;
+  }
+  const btn    = document.getElementById('inv-extract-btn');
+  const status = document.getElementById('inv-extract-status');
+  const fields = document.getElementById('inv-extracted-fields');
+  const matchDiv = document.getElementById('inv-matches');
+
+  status.textContent = 'Reading invoice...';
+  btn.disabled = true;
+  fields.style.display = 'none';
+  matchDiv.innerHTML = '';
+
+  const schedRows = (projects[currentProject]||[]).map(r=>({
+    id:r.id, schedule:r.schedule, itemId:r.itemId,
+    location:r.location, item:r.item, description:r.description||''
+  }));
+
+  const systemPrompt = `You extract invoice data and match line items to a material schedule. Always respond with ONLY valid JSON — no markdown, no explanation.`;
+
+  const taskPrompt = `Extract the following from this invoice and return JSON in this exact shape:
+{
+  "invoiceNumber": "string or null",
+  "supplier": "string or null",
+  "invoiceDate": "YYYY-MM-DD or null",
+  "lineItems": [
+    {
+      "invoiceDesc": "exact description from invoice",
+      "qty": number,
+      "price": number (unit price),
+      "lineType": "product" | "discount" | "delivery" | "tax" | "other",
+      "matchType": "match" | "new",
+      "matchId": existing entry id or null,
+      "matchLabel": "ItemID — Location — Item" if matched else "",
+      "suggestedSchedule": schedule name for new items or "",
+      "suggestedItem": short item name for new items or "",
+      "confidence": "high" | "medium" | "low",
+      "descriptionFields": {
+        "key": "value — only include fields you can confidently extract from the invoice description"
+      }
+    }
+  ]
+}
+
+Match each product line item against these existing schedule entries:
+${JSON.stringify(schedRows)}
+
+For descriptionFields, use the available keys for each matched schedule: ${JSON.stringify(schedFieldsMap)}
+Only populate descriptionFields keys you can confidently extract from the invoice line description (e.g. manufacturer, productName, colourFinish, sku, dimensions). Leave descriptionFields empty {} if insufficient information.
+
+Important:
+- lineType must be "discount" for discounts/rebates/credits, "delivery" for shipping/freight, "tax" for HST/GST/PST, "product" for real items
+- For matches, set matchType="match" and matchId to the id number of the best matching entry
+- For no match, set matchType="new" and suggest a schedule and item name
+- Delivery and tax lines still appear in lineItems but with their lineType set correctly`;
+
+  try {
+    let messages;
+
+    if(_invFileIsUrl){
+      const url = (document.getElementById('inv-url')||{}).value||'';
+      if(!url.trim()){
+        status.textContent='Enter a URL first.';
+        btn.disabled=false; return;
+      }
+      // For URL: ask Claude to fetch and read it
+      messages = [{
+        role: 'user',
+        content: taskPrompt + '\n\nInvoice URL: ' + url + '\n\nNote: extract all invoice data visible at this URL.'
+      }];
+    } else {
+      if(!_invFileData){
+        status.textContent='Attach a file first.';
+        btn.disabled=false; return;
+      }
+      const isPdf = _invFileData.mediaType === 'application/pdf';
+      const contentBlock = isPdf
+        ? {type:'document', source:{type:'base64', media_type:'application/pdf', data:_invFileData.base64}}
+        : {type:'image',    source:{type:'base64', media_type:_invFileData.mediaType, data:_invFileData.base64}};
+      messages = [{
+        role: 'user',
+        content: [contentBlock, {type:'text', text:taskPrompt}]
+      }];
+    }
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': _anthropicKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
+        system: systemPrompt,
+        messages: messages
+      })
+    });
+
+    const data = await resp.json();
+    if(data.error){throw new Error(data.error.message||'API error');}
+    const text = (data.content||[]).map(b=>b.text||'').join('');
+
+    let parsed;
+    try {
+      parsed = JSON.parse(text.replace(/```json|```/g,'').trim());
+    } catch(e){
+      status.textContent = 'Could not parse response. Try again.';
+      btn.disabled=false;
+      console.error('Raw response:', text);
+      return;
+    }
+
+    // ── Populate extracted header fields ──────────────────────────────────────
+    const numEl  = document.getElementById('inv-number');
+    const supEl  = document.getElementById('inv-supplier');
+    const datEl  = document.getElementById('inv-date');
+    const urlRef = document.getElementById('inv-url-ref');
+    if(numEl && parsed.invoiceNumber) numEl.value = parsed.invoiceNumber;
+    if(supEl && parsed.supplier)      supEl.value = parsed.supplier;
+    if(datEl && parsed.invoiceDate)   datEl.value = parsed.invoiceDate;
+    if(urlRef && !_invFileIsUrl){
+      // leave blank for file uploads — user can paste URL manually
+    } else if(urlRef){
+      urlRef.value = (document.getElementById('inv-url-ref')||document.getElementById('inv-url')||{}).value||'';
+    }
+
+    // ── Separate by line type ─────────────────────────────────────────────────
+    const all = parsed.lineItems||[];
+    const productLines  = all.filter(i=>i.lineType==='product');
+    const discountLines = all.filter(i=>i.lineType==='discount');
+    const skippedLines  = all.filter(i=>['delivery','tax','other'].includes(i.lineType));
+
+    // Spread discounts proportionally across product lines
+    if(discountLines.length && productLines.length){
+      const subtotal = productLines.reduce((s,i)=>s+(i.price||0)*(i.qty||1),0);
+      discountLines.forEach(disc=>{
+        const discAmt = Math.abs((disc.price||0)*(disc.qty||1));
+        const discDesc = disc.invoiceDesc||'Discount';
+        productLines.forEach(item=>{
+          const lineTotal = (item.price||0)*(item.qty||1);
+          const share = subtotal>0?(lineTotal/subtotal)*discAmt:0;
+          const perUnit = (item.qty||1)>1?share/(item.qty||1):share;
+          const orig = item.price||0;
+          item.price = Math.round((orig-perUnit)*100)/100;
+          item._discountNote = (item._discountNote?item._discountNote+'; ':'')+discDesc+': original $'+orig.toFixed(2)+' → $'+item.price.toFixed(2);
+        });
+      });
+    }
+
+    invMatchContext = productLines;
+    renderInvoiceMatches(productLines);
+    fields.style.display = '';
+
+    // Show apply button
+    const applyBtn = document.getElementById('inv-apply-btn');
+    if(applyBtn) applyBtn.style.display='';
+
+    let note = productLines.length+' item(s) found.';
+    if(discountLines.length) note += ' Discount spread across items.';
+    if(skippedLines.length)  note += ' '+skippedLines.length+' delivery/tax line(s) excluded.';
+    status.textContent = note;
+
+  } catch(e){
+    status.textContent = 'Error: '+e.message;
+    console.error(e);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '✨ Extract invoice details';
+}
+
+
+function updateInvItemList(i, sched){
+  const dl = document.getElementById('inv-item-list-'+i);
+  if(!dl) return;
+  const items = SCHEDULE_ITEMS[sched]||[];
+  dl.innerHTML = items.map(n=>'<option value="'+n+'">').join('');
+}
+
+function renderInvoiceMatches(items){
+  const div = document.getElementById('inv-matches');
+  if(!items||!items.length){div.innerHTML='<p style="font-size:12px;color:var(--text-muted)">No product items found.</p>';return;}
+  const confColor={high:'#137333',medium:'#8a4b00',low:'#b3261e'};
+  div.innerHTML = items.map((item,i)=>{
+    const isMatch = item.matchType==='match';
+    const borderCol = isMatch?'#c7d8f8':'#fcd34d';
+    const bgCol     = isMatch?'#f0f6ff':'#fffbeb';
+    const conf = item.confidence||'medium';
+    const badge = `<span style="font-size:9.5px;font-weight:600;padding:1px 6px;border-radius:8px;background:${bgCol};color:${confColor[conf]||'#374151'};border:0.5px solid ${borderCol}">${conf} confidence</span>`;
+    const typeTag = isMatch
+      ? `<span style="font-size:10px;color:#174ea6;font-weight:500">&#10003; Matches: ${item.matchLabel||''}</span>`
+      : `<span style="font-size:10px;color:#92400e;font-weight:500">&#43; New entry &rarr; ${item.suggestedSchedule||'Other'} / ${item.suggestedItem||item.invoiceDesc}</span>`;
+    return `<div class="match-item" id="match-${i}" style="border-color:${borderCol};background:${bgCol};cursor:default">
+      <input type="checkbox" id="chk-${i}" checked style="accent-color:var(--slate);flex-shrink:0" onchange="toggleMatch(${i},${i})">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px">
+          <span style="font-size:12px;font-weight:500;color:var(--text)">${item.invoiceDesc}</span>${badge}
+        </div>
+        <div style="display:flex;gap:16px;font-size:11px;color:var(--text-muted);margin-bottom:3px">
+          <span>Qty: <strong>${item.qty||'—'}</strong></span>
+          <span>Unit price: <strong>${item.price?'$'+Number(item.price).toFixed(2):'—'}</strong>${item._discountNote?'<span style="font-size:10px;color:#137333;font-weight:500;margin-left:4px">(discounted)</span>':''}</span>
+        </div>
+        <div>${typeTag}</div>
+        ${!isMatch?`<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px" onclick="event.stopPropagation()">
+          <div>
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;font-weight:500">SCHEDULE</div>
+            <select id="new-sched-${i}" onchange="updateInvItemList(${i},this.value)" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border-med);border-radius:4px;width:100%">
+              ${SCHEDULES.map(sc=>'<option value="'+sc+'"'+(sc===(item.suggestedSchedule||'')?'  selected':'')+'>'+sc+'</option>').join('')}
+            </select>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;font-weight:500">LOCATION</div>
+            <input id="new-loc-${i}" type="text" list="inv-loc-list-${i}" placeholder="e.g. Unit 1-Bathroom" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border-med);border-radius:4px;width:100%">
+            <datalist id="inv-loc-list-${i}">${[...new Set((projects[currentProject]||[]).map(r=>r.location).filter(Boolean))].map(l=>'<option value="'+l+'">').join('')}</datalist>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;font-weight:500">ITEM NAME</div>
+            <input id="new-item-${i}" type="text" list="inv-item-list-${i}" value="${item.suggestedItem||''}" placeholder="${item.invoiceDesc||'Item name'}" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border-med);border-radius:4px;width:100%">
+            <datalist id="inv-item-list-${i}">${(SCHEDULE_ITEMS[item.suggestedSchedule||'']||[]).map(n=>'<option value="'+n+'">').join('')}</datalist>
+          </div>
+        </div>`:''}============================================================
+   DATA & STATE
+   =============================================
+/* ============================================================
+   DATA & STATE
+   ============================================================ */
+const SCHEDULES=['Accessories','Appliance','Door and Trim','Electrical and Low Voltage','Flooring','Hardware','Lighting','Other','Paint','Plumbing','Stone','Tile'];
+const STATUSES=['Unselected','Approved','Ordered','Installed'];
+
+// Schedule prefix codes for item IDs
+const SCHEDULE_PREFIXES = {
+  'Accessories':'ACC','Appliance':'APPL','Tile':'TILE','Flooring':'FLOOR',
+  'Door and Trim':'TRIM','Lighting':'LIGHT','Electrical and Low Voltage':'EL/LO',
+  'Paint':'PAINT','Plumbing':'PLUMB','Specialty Wall Finish':'WALLF',
+  'Stone':'STONE','Hardware':'HW','Other':'OTHER'
+};
+
+// Prefill item names per schedule (from master list)
+const SCHEDULE_ITEMS = {
+  'Accessories':['Glass Handle','Glass Hinges','Makeup Mirror','Mirror','Paper Holder','Reserve Paper Holder','Robe Hook','Shower Curtain and Rod','Shower Grab Bar','Soap Dish / Shelf','Toilet Brush Holder','Towel Bar','Towel Ring','Towel Shelf'],
+  'Appliance':['BBQ','Coffee Machine','Column Freezer','Column Fridge','Cooktop','Dishwasher','Dishwasher Drawer','Dryer','Freezer','Fridge','Fridge/Freezer','Hood Fan','Hood Insert','Ice Maker','Microwave','Microwave Drawer','Microwave Hood Fan','Outdoor Fridge','Range','Speed Oven','Steam Oven','Undercounter Fridge','Wall Oven','Warming Drawer','Washer','Wine Fridge','Stacking Kit'],
+  'Tile':['Backsplash Tile','Baseboard Tile','Bathroom Floor Tile','Feature Wall Tile','Floor Tile','Full Height Backsplash Tile','Shower Bench Tile','Shower Ceiling Tile','Shower Curb','Shower Floor Tile','Shower Niche Tile','Shower Wall Tile','Tile Cap Trim','Tile Edge Trim','Tub Deck Tile','Tub Enclosure Ceiling Tile','Tub Enclosure Wall Tile','Wall Tile','Wall Tile (Above 42")','Wall Tile (Up to 42")'],
+  'Flooring':['Carpet','Carpet Tile','Concrete Finish','Engineered Hardwood','Epoxy Floor','Laminate Flooring','Luxury Vinyl Plank (LVP)','Luxury Vinyl Tile (LVT)','Rubber Flooring','Site-Finished Hardwood','Solid Hardwood','Vinyl Sheet Flooring','Wood Reducer'],
+  'Door and Trim':['Backband','Baseboard','Chair Rail','Crown Moulding','Door','Door Casing','Door Jamb','Door Stop','Panel Moulding','Picture Rail','Shoe Moulding','Window Apron','Window Casing','Window Skirt','Window Stool','Window Jambs'],
+  'Lighting':['BBQ Light','Ceiling Light Fixture','Driveway Accent Lighting','Exterior Sconce','Island Pendant Light','Landscape Lighting','Motion Light','Pantry Strip Light','Pendant Light','Potlight','Soffit Potlight','Stair Light','String Lights','Strip Light','Toe Kick Lighting','Trimless Potlight','Under Cabinet Lighting','Vanity Sconce','Wall Sconce'],
+  'Electrical and Low Voltage':['Camera System','Ceiling Speakers','Doorbell','Doorbell Camera','Exhaust Fan','In-Floor Heating','Motion Sensors','Network Data Port','Security System','Smart Home Hub','Subwoofer Rough-In','TV Rough-In','Wall Speakers','WiFi Access Point'],
+  'Paint':['Accent Walls Paint','Baseboards Paint','Ceiling Paint','Closet Interiors Paint','Door Frames Paint','Exterior Doors Paint','Exterior Trim Paint','Garage Door Paint','Interior Doors Paint','Millwork / Built-Ins Paint','Soffits Paint','Stair Railings Paint','Stair Stringers Paint','Trim Paint','Walls Paint','Window Trim Paint'],
+  'Plumbing':['Kitchen Sink','Kitchen Faucet','Vanity Sink','Vanity Faucet','Laundry Sink','Laundry Faucet','Pantry Sink','Pantry Faucet','Bar Sink','Bar Faucet','Toilet','Bathtub','Shower Kit','Shower Drain','Shower Linear Drain','Floor Drain','Garburator','Instant Hot Water','Water Filtration System','Pot Filler','Hot/Cold Tap Faucet','Toilet Trip Lever','Tub Filler','Body Jets','Steam Unit','Sauna Kit','Hose Bib','Irrigation System','Water Softener','Backflow Preventer','Sump Pump','Backup Sump Pump Battery and Alarm','24" Vanity (Prefab)','30" Vanity (Prefab)','36" Vanity (Prefab)','42" Vanity (Prefab)','54" Vanity (Prefab)','60" Vanity (Prefab)','72" Vanity (Prefab)','96" Vanity (Prefab)','24" Vanity (Custom)','30" Vanity (Custom)','36" Vanity (Custom)','42" Vanity (Custom)','54" Vanity (Custom)','60" Vanity (Custom)','72" Vanity (Custom)','96" Vanity (Custom)','2 Piece Shower Kit','3 Piece Shower Kit'],
+  'Specialty Wall Finish':['Wallpaper','Wallcovering','Plaster Finish','Venetian Plaster','Limewash','Microcement','Concrete Finish'],
+  'Stone':['Countertop','Island Countertop','Vanity Countertop','Backsplash (Slab)','Full Height Backsplash','Stone Shower Bench','Stone Shower Curb','Stone Shower Jamb','Stone Niche Shelf','Stone Window Jamb','Stone Window Sill','Stone Door Jamb','Fireplace Surround','Feature Wall Slab','Bench','Stair Tread / Landing','Baseboard (Stone)'],
+  'Hardware':['Hinges','Concealed Hinges','Passage Handle','Privacy Handle','Dummy Handle','Keyed Entry Handle','Exterior Entry Handle Set','Deadbolt','Pocket Door Track','Pocket Door Hardware Set','Pocket Door Passage Set','Bypass Door Track','Flush Pull','Magnetic Catch','Door Stop Hardware','Strike Plate','Latch','Door Sweep','Threshold','Weatherstripping'],
+};
 
 // Per-line responsibility columns
 // Each stage is 'done' once status reaches a certain level
@@ -1017,7 +2695,7 @@ const _urlToken  = _urlParams.get('token');
 const _urlProj   = _urlParams.get('project'); // human-readable hint (optional)
 
 // Column visibility — all on by default, user can toggle
-const ALL_COLS = ['itemId','location','item','description','qty','price','total','invoiceNum','specDoc','supplier','status'];
+const ALL_COLS = ['itemId','location','item','description','qty','price','total','invoiceNum','specDoc','supplier','status','respSelection','respApproval','respPurchasing'];
 let hiddenCols = new Set(); // columns the user has hidden
 
 // Load API key — try localStorage first, then sessionStorage, then URL param (for local file use)
@@ -1057,8 +2735,24 @@ function canEdit(){ return ['admin','supervisor'].includes(ACCESS_MODE); }
 function isReadOnly(){ return ['trade','client'].includes(ACCESS_MODE); }
 
 
-let projects={};
-Object.keys(SEED).forEach(p=>{projects[p]=SEED[p].map(r=>({...r}));});
+// Load projects from localStorage (persists across sessions)
+// Falls back to SEED data on first load
+let projects=(function(){
+  try{
+    const saved=localStorage.getItem('msm_projects');
+    if(saved){
+      const parsed=JSON.parse(saved);
+      if(parsed && Object.keys(parsed).length) return parsed;
+    }
+  }catch(e){}
+  // First load — use SEED data
+  const p={};
+  Object.keys(SEED).forEach(k=>{p[k]=SEED[k].map(r=>({...r}));});
+  return p;
+})();
+
+// Async-load file blobs from IndexedDB and re-render once ready
+loadBlobsFromFileDB(projects).then(()=>{ if(typeof renderTable==='function') renderTable(); }).catch(()=>{});
 
 /* ============================================================
    UTILITIES
@@ -1233,12 +2927,17 @@ function renderTable(){
   const grandTotal=rows.filter(r=>r.status!=='Unselected').reduce((s,r)=>s+(r.qty||0)*(r.price||0),0);
 
   // Build columns dynamically
-  const cols=[
+  const cols=[];
+  // Checkbox col for admin/supervisor bulk select
+  if(['admin','supervisor'].includes(ACCESS_MODE)){
+    cols.push({key:'_chk',label:'<input type="checkbox" id="chk-all" style="accent-color:#fff;cursor:pointer" onchange="toggleAllRows(this.checked)">',w:'32px',align:'center'});
+  }
+  cols.push(...[
     {key:'itemId',label:'Item ID',w:'80px'},
     {key:'location',label:'Location',w:'110px'},
     {key:'item',label:'Item',w:'110px'},
     {key:'description',label:'Description',w:'200px'},
-  ];
+  ]);
   if(!hidePricing){
     cols.push({key:'qty',label:'Qty',w:'42px',align:'center'});
     cols.push({key:'price',label:'Price',w:'72px',align:'right'});
@@ -1418,7 +3117,8 @@ function renderTable(){
             </span>
           </td>`;
         }
-        case'_edit':return`<td style="text-align:center"><button class="mob-edit-btn" onclick="openEditEntry(${idx})" style="background:none;border:0.5px solid var(--border-med);color:var(--text-muted);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer">Edit</button></td>`;
+        case'_chk':return`<td style="text-align:center;padding:4px"><input type="checkbox" class="row-checkbox" data-id="${r.id}" onchange="toggleRowSelect(${r.id},this.checked)"></td>`;
+        case'_edit':return`<td style="text-align:center"><button class="mob-edit-btn" onclick="openEditEntry(${idx})"" style="background:none;border:0.5px solid var(--border-med);color:var(--text-muted);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer">Edit</button></td>`;
         default:return`<td></td>`;
       }
     });
@@ -1638,7 +3338,11 @@ function buildEntryForm(r){
     +'<div class="section-title" style="grid-column:1/-1">Responsibility</div>'
     +RESP_COLS.map(rc=>{
       const val=r[rc.key]||'';
-      const opts=RESP_PEOPLE.map(p=>'<option'+(p===val?' selected':'')+'>'+p+'</option>').join('');
+      const opts=RESP_PEOPLE.map(p=>{
+        const sel = p===val ? ' selected' : '';
+        const label = p==='' ? '— unassigned —' : p;
+        return '<option value="'+p+'"'+sel+'>'+label+'</option>';
+      }).join('');
       return '<div class="field"><label>'+rc.label+'</label><select id="f-'+rc.key+'">'+opts+'</select></div>';
     }).join('')
     +'<div class="section-title" style="grid-column:1/-1">Item identification</div>'
@@ -1665,7 +3369,7 @@ function openAddEntry(){
   editingId=null;
   document.getElementById('entry-modal-title').textContent='Add entry';
   document.getElementById('entry-delete-btn').style.display='none';
-  document.getElementById('entry-modal-body').innerHTML=buildEntryForm({schedule:currentSchedule,status:'Unselected'});
+  document.getElementById('entry-modal-body').innerHTML=buildEntryForm({schedule:currentSchedule,status:'Unselected',respSelection:'Client',respApproval:'Client',respPurchasing:'Client'});
   showModal('entry-modal');
 }
 
@@ -1722,7 +3426,7 @@ function readFormVals(){
     specUrl:g('f-specurl')?.value?.trim()||'',
     notes:g('f-notes')?.value?.trim()||'',
     status:g('f-status')?.value||'Unselected',
-    ...Object.fromEntries(RESP_COLS.map(rc=>[rc.key, g('f-'+rc.key)?.value||''])),
+    ...Object.fromEntries(RESP_COLS.map(rc=>[rc.key, (g('f-'+rc.key)?.value||'').replace('— unassigned —','')])),
     ...extra
   };
 }
@@ -1753,7 +3457,11 @@ function saveEntry(){
 function deleteEntry(){
   if(!confirm('Delete this entry?'))return;
   projects[currentProject]=projects[currentProject].filter(r=>r.id!==editingId);
-  hideModal('entry-modal');buildNav();renderTable();
+  // Clean up blobs for deleted entry
+  const deletedId = editingId;
+  deleteFileBlob('spec_'+deletedId).catch(()=>{});
+  for(let i=0;i<20;i++) deleteFileBlob('inv_'+deletedId+'_'+i).catch(()=>{});
+  saveProjects();hideModal('entry-modal');buildNav();renderTable();
 }
 
 /* ============================================================
@@ -2177,6 +3885,14 @@ Important:
   btn.textContent = '✨ Extract invoice details';
 }
 
+
+function updateInvItemList(i, sched){
+  const dl = document.getElementById('inv-item-list-'+i);
+  if(!dl) return;
+  const items = SCHEDULE_ITEMS[sched]||[];
+  dl.innerHTML = items.map(n=>'<option value="'+n+'">').join('');
+}
+
 function renderInvoiceMatches(items){
   const div = document.getElementById('inv-matches');
   if(!items||!items.length){div.innerHTML='<p style="font-size:12px;color:var(--text-muted)">No product items found.</p>';return;}
@@ -2251,6 +3967,26 @@ function applyInvoiceMatches(){
         const existingNotes=entry.notes||'';
         const discNote=item._discountNote||'';
         const mergedNotes=[existingNotes,discNote].filter(Boolean).join(' | ');
+
+        // Merge description fields from invoice (fills blanks only, never overwrites)
+        let invDesc = entry.description||'';
+        if(item.descriptionFields && Object.keys(item.descriptionFields).length){
+          const dFields = (SCHEDULE_DESC_FIELDS||{})[entry.schedule]||[];
+          if(dFields.length){
+            const existing = parseStructuredDesc(invDesc, dFields);
+            let merged = false;
+            dFields.forEach(f=>{
+              if(item.descriptionFields[f.key] && !existing[f.key]){
+                existing[f.key] = item.descriptionFields[f.key];
+                merged = true;
+              }
+            });
+            if(merged){
+              invDesc = dFields.filter(f=>existing[f.key]).map(f=>f.label+': '+existing[f.key]).join(' | ');
+            }
+          }
+        }
+
         projects[currentProject][idx]={
           ...entry,
           price:item.price||entry.price,
@@ -2258,29 +3994,66 @@ function applyInvoiceMatches(){
           invoices:newInvs,
           supplier:invSupplier||entry.supplier,
           notes:mergedNotes,
-          status:entry.status==='Unselected'||entry.status==='Unselected'?'Approved':entry.status
+          description:invDesc||entry.description,
+          status:entry.status==='Unselected'?'Approved':entry.status
         };
         applied++;
       }
     } else {
       const schedEl=document.getElementById('new-sched-'+i);
       const itemEl=document.getElementById('new-item-'+i);
+      const locEl=document.getElementById('new-loc-'+i);
       const sched=(schedEl&&schedEl.value?schedEl.value:null)||item.suggestedSchedule||currentSchedule||SCHEDULES[0];
-      const itemName=(itemEl?itemEl.value:null)||item.suggestedItem||item.invoiceDesc;
+      const itemName=(itemEl&&itemEl.value?itemEl.value:null)||item.suggestedItem||item.invoiceDesc;
+      const location=(locEl&&locEl.value?locEl.value:null)||item.suggestedLocation||'';
       const existing=(projects[currentProject]||[]).filter(r=>r.schedule===sched);
-      const prefix=sched.replace(/[^A-Za-z]/g,'').substring(0,4).toUpperCase();
-      let suffix=existing.length+1;
+      const prefix = SCHEDULE_PREFIXES[sched] || sched.replace(/[^A-Za-z]/g,'').substring(0,4).toUpperCase();
+      // Find the highest existing suffix number and increment
       const existingIds=new Set(existing.map(r=>r.itemId));
-      while(existingIds.has(prefix+'-NEW.'+suffix))suffix++;
+      const nums = existing.map(r=>{
+        const m = r.itemId && r.itemId.match(/[\.\-](\d+)$/);
+        return m ? parseInt(m[1]) : 0;
+      });
+      let suffix = (nums.length ? Math.max(...nums) : 0) + 1;
+      // Make sure the ID doesn't already exist
+      while(existingIds.has(prefix+'-'+suffix)) suffix++;
+      // Build description from invoice descriptionFields if available
+      let newEntryDesc = '';
+      if(item.descriptionFields && Object.keys(item.descriptionFields).length){
+        const newFields = (SCHEDULE_DESC_FIELDS||{})[sched]||[];
+        if(newFields.length){
+          newEntryDesc = newFields.filter(f=>item.descriptionFields[f.key])
+            .map(f=>f.label+': '+item.descriptionFields[f.key]).join(' | ');
+        }
+      }
+      if(!newEntryDesc) newEntryDesc = item.invoiceDesc||'';
+
       projects[currentProject].push({
-        id:nextId++,schedule:sched,itemId:prefix+'-NEW.'+suffix,
-        designerItemId:'',location:'',item:itemName,
-        description:item.invoiceDesc,qty:item.qty||0,price:item.price||0,
+        id:nextId++,schedule:sched,itemId:prefix+'-'+suffix,
+        designerItemId:'',location:location,item:itemName,
+        description:newEntryDesc,qty:item.qty||0,price:item.price||0,
         budgetPrice:0,supplier:invSupplier,
         invoices:invNum||invUrl||invPdf?[newInv]:[],
         specUrl:'',specPdf:'',notes:item._discountNote||'',status:'Approved'
       });
       added++;
+    }
+  });
+
+  // Save invoice line items to memory for future prefill
+  invMatchContext.forEach((item,i)=>{
+    const chk = document.getElementById('chk-'+i);
+    if(!chk||!chk.checked) return;
+    if(item.invoiceDesc && invSupplier){
+      const key = 'inv_items';
+      try{
+        const existing = JSON.parse(localStorage.getItem(key)||'{}');
+        if(!existing[invSupplier]) existing[invSupplier]=[];
+        if(!existing[invSupplier].includes(item.invoiceDesc)){
+          existing[invSupplier].push(item.invoiceDesc);
+          localStorage.setItem(key, JSON.stringify(existing));
+        }
+      }catch(e){}
     }
   });
 
@@ -2296,7 +4069,7 @@ function applyInvoiceMatches(){
     const el=document.getElementById(id);if(el)el.value='';
   });
   hideModal('invoice-modal');
-  buildNav();renderTable();
+  saveProjects();buildNav();renderTable();
   if(applied||added)alert('Applied '+applied+' match(es), added '+added+' new entr'+(added===1?'y':'ies')+'.');
 }
 
@@ -2441,6 +4214,7 @@ function toggleAdmin(){
     btn.textContent='★ Admin ON';
     toggles.style.display='flex';
     if(prefillBtn)prefillBtn.style.display='';
+    const sdBtn=document.getElementById('supplier-dir-btn');if(sdBtn)sdBtn.style.display='';
     const npb=document.getElementById('new-proj-btn');if(npb)npb.style.display='';
     // Show resp matrix button
     let rb=document.getElementById('resp-btn');
@@ -2454,6 +4228,7 @@ function toggleAdmin(){
     btn.style.background='';btn.textContent='★ Admin';
     toggles.style.display='none';
     if(prefillBtn)prefillBtn.style.display='none';
+    const sdBtn2=document.getElementById('supplier-dir-btn');if(sdBtn2)sdBtn2.style.display='none';
     const npb2=document.getElementById('new-proj-btn');if(npb2)npb2.style.display='none';
     const rb=document.getElementById('resp-btn');if(rb)rb.remove();
   }
@@ -2480,13 +4255,19 @@ function exitTradeView(){
    T13: SUPPLIER POPOVER
    ============================================================ */
 function showSupplier(name,event){
-  const info=SUPPLIER_DB[name];if(!info)return;
+  const info=SUPPLIER_DB[name]||{};
   const pop=document.getElementById('supplier-popover');
   document.getElementById('pop-name').textContent=name;
   document.getElementById('pop-contact').textContent=info.contact||'—';
   document.getElementById('pop-phone').textContent=info.phone||'—';
   document.getElementById('pop-email').textContent=info.email||'—';
   document.getElementById('pop-address').textContent=info.address||'—';
+  document.getElementById('pop-website').textContent=info.website||'—';
+  document.getElementById('pop-notes').textContent=info.notes||'—';
+  // Show edit button for admin
+  const editBtn=document.getElementById('pop-edit-btn');
+  if(editBtn) editBtn.style.display=['admin','supervisor'].includes(ACCESS_MODE)?'':'none';
+  if(editBtn) editBtn.onclick=()=>{closePopover();openSupplierEdit(name);};
   pop.style.left=(event.pageX+12)+'px';
   pop.style.top=(event.pageY-20)+'px';
   pop.classList.add('open');
@@ -2545,7 +4326,8 @@ function updateImportHint(sched){
 const COL_LABELS = {
   itemId:'Item ID', location:'Location', item:'Item', description:'Description',
   qty:'Qty', price:'Price', total:'Total', invoiceNum:'Invoice #',
-  specDoc:'Spec', supplier:'Supplier', status:'Status'
+  specDoc:'Spec', supplier:'Supplier', status:'Status',
+  respSelection:'Selection', respApproval:'Approval', respPurchasing:'Purchasing'
 };
 
 function buildColPicker(){
@@ -2678,7 +4460,19 @@ async function extractSpec(){
     id:r.id,schedule:r.schedule,itemId:r.itemId,location:r.location,item:r.item,description:r.description||''
   }));
 
-  const taskPrompt=`You are reading a product specification sheet. Extract the product details and match them to schedule entries.
+  // Build description fields map for the prompt
+  const schedFieldsMap={};
+  Object.entries(SCHEDULE_DESC_FIELDS||{}).forEach(([sched,fields])=>{
+    schedFieldsMap[sched]=fields.map(f=>f.key+' ('+f.label+')');
+  });
+
+  // Build the description fields map so Claude knows what fields to extract per schedule
+  const schedFieldsMap = {};
+  Object.entries(SCHEDULE_DESC_FIELDS||{}).forEach(([sched,fields])=>{
+    schedFieldsMap[sched] = fields.map(f=>f.key+' ('+f.label+')');
+  });
+
+  const taskPrompt=`You are reading a product specification sheet. Extract the product details, match them to schedule entries, AND extract structured description fields.
 
 Return ONLY valid JSON in this exact shape, no markdown:
 {
@@ -2691,10 +4485,18 @@ Return ONLY valid JSON in this exact shape, no markdown:
       "itemId": "e.g. ACC-1.1",
       "label": "ItemID — Location — Item",
       "confidence": "high" | "medium" | "low",
-      "reason": "brief explanation of why this matches"
+      "reason": "brief explanation of why this matches",
+      "descriptionFields": {
+        "key": "value — only include fields you can extract from the spec"
+      }
     }
   ]
 }
+
+For each match, also populate descriptionFields using the available keys for that schedule.
+Available fields per schedule: ${JSON.stringify(schedFieldsMap)}
+
+Extract as many description fields as you can find in the spec sheet (manufacturer, product name, finish, dimensions, SKU, etc).
 
 Match the spec sheet product against these existing schedule entries:
 ${JSON.stringify(schedRows)}
@@ -2719,7 +4521,7 @@ Return all entries that could plausibly be this product. A spec sheet for a sing
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':_anthropicKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages})
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:3000,messages})
     });
     const data=await resp.json();
     if(data.error)throw new Error(data.error.message||'API error');
@@ -2791,10 +4593,33 @@ function applySpecMatches(){
     if(!chk||!chk.checked)return;
     const idx=projects[currentProject].findIndex(r=>r.id===m.id);
     if(idx>=0){
+      const entry = projects[currentProject][idx];
+      const sched = entry.schedule;
+      const fields = (SCHEDULE_DESC_FIELDS||{})[sched]||[];
+
+      // Merge new description fields from spec into existing description
+      let newDesc = entry.description||'';
+      if(m.descriptionFields && fields.length){
+        const existing = parseStructuredDesc(newDesc, fields);
+        // Merge — spec values fill in blanks, don't overwrite existing data
+        let merged = false;
+        fields.forEach(f=>{
+          if(m.descriptionFields[f.key] && !existing[f.key]){
+            existing[f.key] = m.descriptionFields[f.key];
+            merged = true;
+          }
+        });
+        if(merged){
+          // Rebuild description string from merged fields
+          newDesc = fields.filter(f=>existing[f.key]).map(f=>f.label+': '+existing[f.key]).join(' | ');
+        }
+      }
+
       projects[currentProject][idx]={
-        ...projects[currentProject][idx],
-        specUrl:specUrl||projects[currentProject][idx].specUrl||'',
-        specPdf:specPdf||projects[currentProject][idx].specPdf||''
+        ...entry,
+        description: newDesc || entry.description,
+        specUrl:specUrl||entry.specUrl||'',
+        specPdf:specPdf||entry.specPdf||''
       };
       applied++;
     }
@@ -2810,7 +4635,7 @@ function applySpecMatches(){
   const urlEl=document.getElementById('spec-url');if(urlEl)urlEl.value='';
   try{switchSpecTab('url');}catch(e){}
   hideModal('spec-modal');
-  buildNav();renderTable();
+  saveProjects();buildNav();renderTable();
   if(applied)alert('Spec sheet attached to '+applied+' item(s).');
 }
 
@@ -3210,6 +5035,279 @@ function resetPrefillToDefaults(){
   buildPrefillNav();
 }
 
+
+/* ============================================================
+   BULK EDIT
+   ============================================================ */
+let _selectedIds = new Set();
+
+function toggleRowSelect(id, checked){
+  if(checked) _selectedIds.add(id);
+  else _selectedIds.delete(id);
+  updateBulkBar();
+}
+
+function toggleAllRows(checked){
+  const checkboxes = document.querySelectorAll('.row-checkbox');
+  checkboxes.forEach(cb=>{
+    cb.checked = checked;
+    const id = parseInt(cb.dataset.id);
+    if(checked) _selectedIds.add(id);
+    else _selectedIds.delete(id);
+  });
+  updateBulkBar();
+}
+
+function updateBulkBar(){
+  const bar = document.getElementById('bulk-bar');
+  const count = document.getElementById('bulk-count');
+  if(!bar) return;
+  if(_selectedIds.size > 0){
+    bar.classList.add('active');
+    count.textContent = _selectedIds.size + ' selected';
+  } else {
+    bar.classList.remove('active');
+  }
+  // Sync chk-all state
+  const all = document.querySelectorAll('.row-checkbox');
+  const chkAll = document.getElementById('chk-all');
+  if(chkAll && all.length > 0){
+    chkAll.checked = _selectedIds.size === all.length;
+    chkAll.indeterminate = _selectedIds.size > 0 && _selectedIds.size < all.length;
+  }
+}
+
+function bulkApplyStatus(){
+  const val = document.getElementById('bulk-status-sel').value;
+  if(!val){ alert('Select a status first.'); return; }
+  (projects[currentProject]||[]).forEach(r=>{
+    if(_selectedIds.has(r.id)) r.status = val;
+  });
+  saveProjects();
+  bulkClear();
+  buildNav(); renderTable();
+}
+
+function bulkApplyResp(){
+  const field = document.getElementById('bulk-resp-field').value;
+  const val = document.getElementById('bulk-resp-val').value;
+  if(!field || !val){ alert('Select a field and person.'); return; }
+  (projects[currentProject]||[]).forEach(r=>{
+    if(_selectedIds.has(r.id)) r[field] = val;
+  });
+  saveProjects();
+  bulkClear();
+  buildNav(); renderTable();
+}
+
+function bulkClear(){
+  _selectedIds.clear();
+  document.querySelectorAll('.row-checkbox').forEach(cb=>cb.checked=false);
+  const chkAll = document.getElementById('chk-all');
+  if(chkAll){ chkAll.checked=false; chkAll.indeterminate=false; }
+  updateBulkBar();
+}
+
+
+
+/* ============================================================
+   FILE STORAGE — IndexedDB
+   Stores invoice PDFs and spec PDFs separately from entry data
+   so localStorage doesn't hit its 5MB limit.
+   Keys: "inv_{entryId}_{invoiceIndex}" and "spec_{entryId}"
+   ============================================================ */
+
+let _fileDB = null;
+
+function openFileDB(){
+  return new Promise((resolve, reject)=>{
+    if(_fileDB){ resolve(_fileDB); return; }
+    const req = indexedDB.open('msm_files', 1);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore('files');
+    };
+    req.onsuccess = e => { _fileDB = e.target.result; resolve(_fileDB); };
+    req.onerror = e => reject(e);
+  });
+}
+
+async function saveFileBlob(key, data){
+  if(!data) return;
+  try{
+    const db = await openFileDB();
+    const tx = db.transaction('files','readwrite');
+    tx.objectStore('files').put(data, key);
+  }catch(e){ console.warn('FileDB save error:', e); }
+}
+
+async function loadFileBlob(key){
+  try{
+    const db = await openFileDB();
+    return new Promise((resolve)=>{
+      const tx = db.transaction('files','readonly');
+      const req = tx.objectStore('files').get(key);
+      req.onsuccess = () => resolve(req.result||null);
+      req.onerror = () => resolve(null);
+    });
+  }catch(e){ return null; }
+}
+
+async function deleteFileBlob(key){
+  try{
+    const db = await openFileDB();
+    const tx = db.transaction('files','readwrite');
+    tx.objectStore('files').delete(key);
+  }catch(e){}
+}
+
+// Strip blob data from projects before saving to localStorage
+// Blobs are stored in IndexedDB instead
+function stripBlobs(projectsObj){
+  const stripped = {};
+  Object.entries(projectsObj).forEach(([proj, rows])=>{
+    stripped[proj] = rows.map(r=>{
+      const entry = {...r};
+      // Strip spec PDF
+      delete entry.specPdf;
+      // Strip invoice PDFs
+      if(entry.invoices){
+        entry.invoices = entry.invoices.map(inv=>{
+          const i = {...inv};
+          delete i.pdf;
+          return i;
+        });
+      }
+      return entry;
+    });
+  });
+  return stripped;
+}
+
+// Save all file blobs from projects into IndexedDB
+async function saveBlobsToFileDB(projectsObj){
+  for(const [proj, rows] of Object.entries(projectsObj)){
+    for(const r of rows){
+      // Save spec PDF
+      if(r.specPdf){
+        await saveFileBlob('spec_'+r.id, r.specPdf);
+      }
+      // Save invoice PDFs
+      if(r.invoices){
+        for(let i=0;i<r.invoices.length;i++){
+          if(r.invoices[i].pdf){
+            await saveFileBlob('inv_'+r.id+'_'+i, r.invoices[i].pdf);
+          }
+        }
+      }
+    }
+  }
+}
+
+// Rehydrate entries with their blobs from IndexedDB
+async function loadBlobsFromFileDB(projectsObj){
+  for(const [proj, rows] of Object.entries(projectsObj)){
+    for(const r of rows){
+      // Load spec PDF
+      const specPdf = await loadFileBlob('spec_'+r.id);
+      if(specPdf) r.specPdf = specPdf;
+      // Load invoice PDFs
+      if(r.invoices){
+        for(let i=0;i<r.invoices.length;i++){
+          const invPdf = await loadFileBlob('inv_'+r.id+'_'+i);
+          if(invPdf) r.invoices[i].pdf = invPdf;
+        }
+      }
+    }
+  }
+}
+
+function saveProjects(){
+  // Save blobs to IndexedDB, strip them from localStorage copy
+  saveBlobsToFileDB(projects).catch(e=>console.warn('blob save error',e));
+  try{
+    const stripped = stripBlobs(projects);
+    localStorage.setItem('msm_projects', JSON.stringify(stripped));
+  }catch(e){
+    console.warn('localStorage save error:', e);
+    // If localStorage is full, try clearing old data
+    try{ localStorage.removeItem('msm_projects'); }catch(e2){}
+  }
+}
+
+
+/* ============================================================
+   SUPPLIER DIRECTORY
+   ============================================================ */
+
+function openSupplierDirectory(){
+  buildSupplierList();
+  showModal('supplier-modal');
+}
+
+function buildSupplierList(filter=''){
+  const list = document.getElementById('supplier-list');
+  if(!list) return;
+  const names = Object.keys(SUPPLIER_DB).sort();
+  const filtered = filter ? names.filter(n=>n.toLowerCase().includes(filter.toLowerCase())) : names;
+
+  if(!filtered.length){
+    list.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">No suppliers found.</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(name=>{
+    const s = SUPPLIER_DB[name];
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:0.5px solid var(--border);cursor:pointer" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" onclick="openSupplierEdit('${name.replace(/'/g,"\\'")}')">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;color:var(--text)">${name}</div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-top:1px">${[s.contact,s.phone,s.email].filter(Boolean).join(' · ')}</div>
+      </div>
+      <button onclick="event.stopPropagation();openSupplierEdit('${name.replace(/'/g,"\\'")}');" style="background:none;border:0.5px solid var(--border-med);border-radius:5px;padding:3px 10px;font-size:11px;color:var(--text-muted);cursor:pointer">Edit</button>
+      <button onclick="event.stopPropagation();deleteSupplier('${name.replace(/'/g,"\\'")}');" style="background:none;border:0.5px solid #f09595;border-radius:5px;padding:3px 8px;font-size:11px;color:#b3261e;cursor:pointer">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function openSupplierEdit(name){
+  const s = SUPPLIER_DB[name]||{};
+  const isNew = !SUPPLIER_DB[name];
+  document.getElementById('sup-edit-title').textContent = isNew ? 'Add supplier' : 'Edit supplier';
+  document.getElementById('sup-name').value = name||'';
+  document.getElementById('sup-name').readOnly = !isNew;
+  document.getElementById('sup-name').style.background = isNew ? '' : '#f9fafb';
+  document.getElementById('sup-contact').value = s.contact||'';
+  document.getElementById('sup-phone').value = s.phone||'';
+  document.getElementById('sup-email').value = s.email||'';
+  document.getElementById('sup-website').value = s.website||'';
+  document.getElementById('sup-address').value = s.address||'';
+  document.getElementById('sup-notes').value = s.notes||'';
+  document.getElementById('sup-edit-original').value = name||'';
+  showModal('supplier-edit-modal');
+}
+
+function saveSupplierEdit(){
+  const name = document.getElementById('sup-name').value.trim();
+  if(!name){ alert('Enter a supplier name.'); return; }
+  SUPPLIER_DB[name] = {
+    contact:  document.getElementById('sup-contact').value.trim(),
+    phone:    document.getElementById('sup-phone').value.trim(),
+    email:    document.getElementById('sup-email').value.trim(),
+    website:  document.getElementById('sup-website').value.trim(),
+    address:  document.getElementById('sup-address').value.trim(),
+    notes:    document.getElementById('sup-notes').value.trim(),
+  };
+  saveSupplierDB();
+  hideModal('supplier-edit-modal');
+  buildSupplierList();
+}
+
+function deleteSupplier(name){
+  if(!confirm('Delete '+name+' from the supplier directory?')) return;
+  delete SUPPLIER_DB[name];
+  saveSupplierDB();
+  buildSupplierList();
+}
+
 (function bootApp(){
   const app = document.getElementById('main-app');
   const tradeBanner = document.getElementById('trade-banner');
@@ -3291,6 +5389,12 @@ function resetPrefillToDefaults(){
   const respBtn = document.getElementById('resp-matrix-btn');
   if(respBtn && ['admin','supervisor'].includes(ACCESS_MODE)){
     respBtn.style.display = '';
+  }
+
+  // Show supplier directory button for admin/supervisor
+  const supDirBtn = document.getElementById('supplier-dir-btn');
+  if(supDirBtn && ['admin','supervisor'].includes(ACCESS_MODE)){
+    supDirBtn.style.display = '';
   }
 
   // Wire spec file drop zone
@@ -3420,6 +5524,75 @@ function resetPrefillToDefaults(){
   <div class="mftr">
     <button class="btn btn-white btn-sm" onclick="resetPrefillToDefaults()">Reset all to defaults</button>
     <button class="btn btn-white btn-sm" onclick="hideModal('prefill-modal')">Close</button>
+  </div>
+</div>
+</div>
+
+
+<!-- SUPPLIER DIRECTORY MODAL -->
+<div class="overlay" id="supplier-modal">
+<div class="modal wide">
+  <div class="mhdr">
+    <h2>&#128101; Supplier Directory</h2>
+    <button class="close" onclick="hideModal('supplier-modal')">&#215;</button>
+  </div>
+  <div class="mbody" style="padding:0">
+    <div style="padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;gap:8px;align-items:center">
+      <input type="text" placeholder="Search suppliers..." oninput="buildSupplierList(this.value)"
+        style="flex:1;font-size:12px;padding:6px 10px;border:0.5px solid var(--border-med);border-radius:6px;outline:none">
+      <button onclick="openSupplierEdit('')" style="background:var(--slate);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:500;white-space:nowrap">+ Add supplier</button>
+    </div>
+    <div id="supplier-list" style="overflow-y:auto;max-height:60vh"></div>
+  </div>
+  <div class="mftr">
+    <button class="btn btn-white btn-sm" onclick="hideModal('supplier-modal')">Close</button>
+  </div>
+</div>
+</div>
+
+<!-- SUPPLIER EDIT MODAL -->
+<div class="overlay" id="supplier-edit-modal">
+<div class="modal narrow">
+  <div class="mhdr">
+    <h2 id="sup-edit-title">Edit supplier</h2>
+    <button class="close" onclick="hideModal('supplier-edit-modal')">&#215;</button>
+  </div>
+  <div class="mbody">
+    <input type="hidden" id="sup-edit-original">
+    <div class="fg">
+      <div class="field full">
+        <label>Supplier name</label>
+        <input type="text" id="sup-name" placeholder="e.g. Kohlerce Supply">
+      </div>
+      <div class="field">
+        <label>Contact person</label>
+        <input type="text" id="sup-contact" placeholder="e.g. James Kohler">
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="text" id="sup-phone" placeholder="e.g. 416-555-0101">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="text" id="sup-email" placeholder="e.g. james@supplier.com">
+      </div>
+      <div class="field">
+        <label>Website</label>
+        <input type="text" id="sup-website" placeholder="e.g. www.supplier.com">
+      </div>
+      <div class="field full">
+        <label>Address</label>
+        <input type="text" id="sup-address" placeholder="e.g. 120 Industry Pkwy, Toronto ON">
+      </div>
+      <div class="field full">
+        <label>Notes</label>
+        <textarea id="sup-notes" placeholder="Lead times, payment terms, account number..." style="min-height:60px"></textarea>
+      </div>
+    </div>
+  </div>
+  <div class="mftr">
+    <button class="btn btn-white btn-sm" onclick="hideModal('supplier-edit-modal')">Cancel</button>
+    <button class="btn btn-sm" style="background:var(--slate);color:#fff" onclick="saveSupplierEdit()">Save supplier</button>
   </div>
 </div>
 </div>
